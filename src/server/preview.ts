@@ -10,10 +10,11 @@
 
 import { spawn } from "node:child_process";
 
-import { columnNamed } from "../shared/query.ts";
 import { shellQuote } from "../shared/command.ts";
 import type { PreviewResult } from "../shared/wire.ts";
 import type { InputRecord } from "./input.ts";
+import { partOf } from "./output.ts";
+import type { Source } from "./output.ts";
 
 /** What the view is shown of a preview at most: more is cut, and the view says so. */
 const MAX_OUTPUT = 256 * 1024;
@@ -23,13 +24,11 @@ const TIMEOUT_MS = 10_000;
 export function commandFor(
   template: string,
   record: InputRecord,
-  names: readonly string[],
+  source: Pick<Source, "names" | "format">,
 ): string {
   return template.replace(/\{([^{}]*)\}/g, (whole, name: string) => {
-    if (name === "") return shellQuote(record.raw);
-    if (/^\d+$/.test(name)) return shellQuote(record.cells[Number(name) - 1] ?? "");
-    const at = columnNamed(names, name);
-    return at < 0 ? whole : shellQuote(record.cells[at] ?? "");
+    const part = partOf(record, name, source);
+    return part === undefined ? whole : shellQuote(part);
   });
 }
 

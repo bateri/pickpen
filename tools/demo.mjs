@@ -1,10 +1,11 @@
 // Writes the inputs of demo/: what `kubectl get pods`, `ps aux`, `git log --oneline`, a CSV
-// export and a JSON-lines access log look like, made up, and the same on every run (a seeded
+// export and a JSON-lines access log look like, made up, and the list of pickpen's own sources
+// (for `--preview 'head {}'`), and the same on every run (a seeded
 // generator), so that the harness and the screenshots show the same rows.
 //
 //   node tools/demo.mjs
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
 
 let seed = 20261022;
 function random() {
@@ -18,7 +19,8 @@ const id = (n, alphabet = "bcdfghjklmnpqrstvwxz2456789") =>
 const pad = (text, width) => String(text).padEnd(width);
 const right = (text, width) => String(text).padStart(width);
 
-const dir = new URL("../demo/", import.meta.url);
+const root = new URL("../", import.meta.url);
+const dir = new URL("demo/", root);
 mkdirSync(dir, { recursive: true });
 const write = (name, text) => writeFileSync(new URL(name, dir), text);
 
@@ -186,22 +188,51 @@ write("servers.csv", csv.join("\n") + "\n");
 
 // ---- git log --oneline -------------------------------------------------------------------
 
-const verbs = ["Fix", "Add", "Keep", "Read", "Show", "Let", "Move", "Drop", "Tell", "Write"];
-const things = [
-  "the order total when a coupon is applied twice",
-  "a retry for the payment provider's 503",
-  "the search index warm after a deploy",
-  "invoices as PDF from the account page",
-  "the session alive across a password change",
-  "the queue's depth in the health check",
-  "the cart when the user signs in on another device",
-  "the mailer's bounce handling to its own worker",
-  "the old export endpoint",
-  "the user what failed in the import",
+const messages = [
+  "Fix the order total when a coupon is applied twice",
+  "Retry the payment provider's 503 once, after a second",
+  "Keep the search index warm after a deploy",
+  "Offer invoices as PDF from the account page",
+  "Keep the session across a password change",
+  "Report the queue's depth in the health check",
+  "Merge the cart when the user signs in on another device",
+  "Move the mailer's bounce handling to its own worker",
+  "Drop the old export endpoint",
+  "Tell the user which rows of an import failed, and why",
+  "Read the currency from the account, not the browser",
+  "Stop sending the welcome mail twice on a retried sign-up",
+  "Cache the product page for a minute behind the CDN",
+  "Show the refund's state on the order page",
+  "Let support search orders by the last four digits",
+  "Time out the search after two seconds and say so",
+  "Add an index on orders(created_at, status)",
+  "Bump the API's rate limit for partners to 600/min",
+  "Write the nightly report to object storage",
+  "Fix the time zone of the scheduled exports",
+  "Keep the last 30 days of audit logs, not 7",
+  "Rotate the signing key without logging everyone out",
+  "Explain a declined card in words, not a code",
+  "Batch the analytics events, 50 at a time",
+  "Remove the feature flag for the new checkout",
+  "Count a cancelled order once in the dashboard",
+  "Lazy-load the images below the fold",
+  "Fix the race between two refunds of one order",
+  "Name the worker's queues after what they carry",
+  "Release 2.14.0",
 ];
-const commits = [];
-for (let n = 0; n < 60; n++)
-  commits.push(`${id(7, "0123456789abcdef")} ${pick(verbs)} ${pick(things)}`);
-write("commits.txt", commits.join("\n") + "\n");
+write("commits.txt", messages.map((m) => `${id(7, "0123456789abcdef")} ${m}`).join("\n") + "\n");
 
-console.log("wrote demo/: pods.txt ps.txt requests.jsonl servers.csv commits.txt");
+// ---- find . -name '*.ts' -------------------------------------------------------------------
+
+const files = [];
+const walk = (path) => {
+  for (const entry of readdirSync(new URL(path, root), { withFileTypes: true })) {
+    const child = `${path}${entry.name}`;
+    if (entry.isDirectory()) walk(`${child}/`);
+    else if (/\.(ts|tsx|css)$/.test(entry.name)) files.push(`./${child}`);
+  }
+};
+walk("src/");
+write("files.txt", files.sort().join("\n") + "\n");
+
+console.log("wrote demo/: pods.txt ps.txt requests.jsonl servers.csv commits.txt files.txt");

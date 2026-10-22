@@ -23,17 +23,41 @@ export interface Source {
   heading: string | undefined;
 }
 
+/**
+ * A part of a row, by the name `--field`, `--format` and `--preview` give it: a column by its
+ * heading, `2` the second column, and `` (as in `{}`) the row as it was read. In lines, which
+ * have one column, `2` is the line's second word, as fzf and awk count: `git log --oneline |
+ * pickpen --field 1` writes the hashes. A column whose heading is a number is that column.
+ */
+export function partOf(
+  record: InputRecord,
+  name: string,
+  source: Pick<Source, "names" | "format">,
+): string | undefined {
+  if (name === "") return record.raw;
+  const at = columnNamed(source.names, name);
+  if (at >= 0) return record.cells[at] ?? "";
+  if (!/^\d+$/.test(name) || Number(name) === 0) return undefined;
+  const n = Number(name);
+  if (source.format === "lines") return record.raw.trim().split(/\s+/)[n - 1] ?? "";
+  return record.cells[n - 1] ?? "";
+}
+
+/** Whether `partOf` knows the name with these columns. */
+export function knows(name: string, names: readonly string[]): boolean {
+  return name === "" || columnNamed(names, name) >= 0 || (/^\d+$/.test(name) && Number(name) > 0);
+}
+
 /** Why the shape cannot be written with these columns, or undefined when it can. */
 export function problemOf(shape: Shape, names: readonly string[]): string | undefined {
   const missing = (name: string) => `There is no column named ${JSON.stringify(name)}`;
   if (shape.kind === "fields") {
-    const unknown = shape.names.find((name) => columnNamed(names, name) < 0);
+    const unknown = shape.names.find((name) => !knows(name, names));
     return unknown === undefined ? undefined : missing(unknown);
   }
   if (shape.kind === "template") {
     for (const [, name] of shape.template.matchAll(/\{([^{}]*)\}/g)) {
-      if (name === "" || /^\d+$/.test(name!)) continue;
-      if (columnNamed(names, name!) < 0) return missing(name!);
+      if (!knows(name!, names)) return missing(name!);
     }
   }
   return undefined;
@@ -60,12 +84,12 @@ export function render(records: readonly InputRecord[], shape: Shape, source: So
   if (records.length === 0) return "";
   const { names } = source;
   switch (shape.kind) {
-    case "fields": {
-      const at = shape.names.map((name) => columnNamed(names, name));
-      return lines(records.map((r) => at.map((column) => r.cells[column] ?? "").join("\t")));
-    }
+    case "fields":
+      return lines(
+        records.map((r) => shape.names.map((name) => partOf(r, name, source) ?? "").join("\t")),
+      );
     case "template":
-      return lines(records.map((r) => fillTemplate(shape.template, r, names)));
+      return lines(records.map((r) => fillTemplate(shape.template, r, source)));
     case "as":
       return renderAs(shape.format, records, source);
     case "input":
@@ -107,18 +131,13 @@ function renderAs(
   }
 }
 
-/** `{NAME}` is that column, `{2}` the second, `{}` the row as it was read. */
+/** `{NAME}` is that column, `{2}` the second, `{}` the row as it was read (`partOf`). */
 export function fillTemplate(
   template: string,
   record: InputRecord,
-  names: readonly string[],
+  source: Pick<Source, "names" | "format">,
 ): string {
-  return template.replace(/\{([^{}]*)\}/g, (_, name: string) => {
-    if (name === "") return record.raw;
-    if (/^\d+$/.test(name)) return record.cells[Number(name) - 1] ?? "";
-    const at = columnNamed(names, name);
-    return at < 0 ? "" : (record.cells[at] ?? "");
-  });
+  return template.replace(/\{([^{}]*)\}/g, (_, name: string) => partOf(record, name, source) ?? "");
 }
 
 /** Whether rows can be written one by one as they come, rather than all at the end. */

@@ -25,7 +25,7 @@ export function Palette() {
   const shown = useMemo(() => {
     const words = text.toLowerCase().split(/\s+/).filter(Boolean);
     return all.filter((c) => {
-      const title = `${c.title} ${c.group}`.toLowerCase();
+      const title = `${c.title} ${c.group} ${c.also ?? ""}`.toLowerCase();
       return words.every((w) => title.includes(w));
     });
   }, [all, text]);

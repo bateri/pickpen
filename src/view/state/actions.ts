@@ -52,23 +52,28 @@ function placesOf(ids: number[]): Int32Array {
   return where;
 }
 
-/** The cursor after the rows shown changed: on its row if it is still shown, else where it was. */
+/** The cursor after the rows shown changed: on its row if it is still shown, else on the first. */
 function keptCursor(ids: number[], where: Int32Array): number | null {
-  const { cursor, where: before } = get();
+  const { cursor } = get();
   if (ids.length === 0) return null;
   if (cursor !== null && (where[cursor] ?? -1) >= 0) return cursor;
-  const at = cursor === null ? 0 : Math.max(0, before[cursor] ?? 0);
-  return ids[Math.min(at, ids.length - 1)]!;
+  return ids[0]!;
 }
 
-function show(ids: number[]): void {
-  const where = placesOf(ids);
-  set({ shown: ids, where, cursor: keptCursor(ids, where) });
-}
-
-export function refilter(): void {
+/**
+ * The rows to show, in order. A new query or order starts the cursor at the top, as a search
+ * does; rows taken into their places while they come leave it on its row.
+ */
+function refilter(fromTop: boolean): void {
   const { query, order } = get();
-  show(sortIds(matching(parsed(query)), order));
+  const ids = sortIds(matching(parsed(query)), order);
+  const where = placesOf(ids);
+  set({
+    shown: ids,
+    where,
+    cursor: fromTop ? (ids[0] ?? null) : keptCursor(ids, where),
+    ...(fromTop ? { follow: false } : {}),
+  });
 }
 
 let filterTimer: ReturnType<typeof setTimeout> | undefined;
@@ -77,13 +82,13 @@ let filterTimer: ReturnType<typeof setTimeout> | undefined;
 export function setQuery(query: string): void {
   set({ query });
   clearTimeout(filterTimer);
-  if (table.rows.length > 20_000) filterTimer = setTimeout(refilter, 60);
-  else refilter();
+  if (table.rows.length > 20_000) filterTimer = setTimeout(() => refilter(true), 60);
+  else refilter(true);
 }
 
 export function setOrder(order: Order | null): void {
   set({ order, ...(order ? { column: order.column } : {}) });
-  refilter();
+  refilter(true);
 }
 
 /** A heading's click: up, then down, then the input's order again. */
@@ -128,11 +133,11 @@ function takeBatch(batch: Batch): void {
   }
   if (columnsChanged || state.order !== null) {
     // A sorted list takes new rows into their places at most a few times a second.
-    if (columnsChanged || from === 0) refilter();
+    if (columnsChanged || from === 0) refilter(false);
     else if (added > 0 && resortTimer === undefined) {
       resortTimer = setTimeout(() => {
         resortTimer = undefined;
-        refilter();
+        refilter(false);
       }, 250);
     }
   } else if (added > 0) {

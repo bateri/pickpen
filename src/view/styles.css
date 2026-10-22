@@ -241,6 +241,7 @@ kbd {
   outline: 0;
   padding: 5px 0;
   caret-color: var(--accent);
+  text-overflow: ellipsis;
 }
 
 .query::placeholder {

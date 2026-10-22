@@ -146,9 +146,19 @@ function columnMenu(column: number): MenuItem[] {
   const sending = (fields ?? boot?.given.field ?? []).some(
     (f) => f.toLowerCase() === name.toLowerCase(),
   );
+  const quantities =
+    QUANTITIES.has(table.kinds[column] ?? "text") || table.kinds[column] === "date";
   return [
-    { label: "Order up", run: () => act.setOrder({ column, descending: false }) },
-    { label: "Order down", run: () => act.setOrder({ column, descending: true }) },
+    {
+      label: quantities ? "Smallest first" : "A to Z",
+      run: () => act.setOrder({ column, descending: false }),
+      disabled: order?.column === column && !order.descending,
+    },
+    {
+      label: quantities ? "Largest first" : "Z to A",
+      run: () => act.setOrder({ column, descending: true }),
+      disabled: order?.column === column && order.descending,
+    },
     {
       label: "The input's order",
       keys: "Ctrl-0",
@@ -232,11 +242,18 @@ export function Rows() {
     return () => window.removeEventListener("mouseup", up);
   }, []);
 
+  // A last column of words takes the room that is left; one of quantities keeps its width,
+  // so that it stays beside the others, and the room is left empty after it.
+  const lastColumn = columns.at(-1);
+  const lastIsQuantity =
+    lastColumn !== undefined && QUANTITIES.has(table.kinds[lastColumn] ?? "text");
   const template = `${MARK}px ${columns
     .map((c, i) =>
-      i === columns.length - 1 ? `minmax(${widths[c] ?? 80}px, 1fr)` : `${widths[c] ?? 80}px`,
+      i === columns.length - 1 && !lastIsQuantity
+        ? `minmax(${widths[c] ?? 80}px, 1fr)`
+        : `${widths[c] ?? 80}px`,
     )
-    .join(" ")}`;
+    .join(" ")}${lastIsQuantity ? " minmax(0, 1fr)" : ""}`;
   const width = MARK + columns.reduce((sum, c) => sum + (widths[c] ?? 80), 0);
   const first = Math.max(0, Math.floor(view.top / ROW) - OVERSCAN);
   const end = Math.min(shown.length, Math.ceil((view.top + view.height) / ROW) + OVERSCAN);

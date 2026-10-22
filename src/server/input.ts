@@ -123,6 +123,10 @@ export function detect(text: string, ended = true): Format {
   if (first === undefined) return "lines";
   if (first.startsWith("{") || first.startsWith("[")) {
     const value = tryJson(first);
+    // One object alone, holding the rows (`{"items": [...]}`, as an API answers): a document.
+    if (isObject(value) && ended && lines.length === 1 && rowsInside(value) !== undefined) {
+      return "json";
+    }
     if (isObject(value)) return "jsonl";
     if (Array.isArray(value)) return "json";
     if (first === "{" || first === "[" || /^\[\s*[{["]/.test(first) || /^\{\s*"/.test(first)) {
@@ -132,7 +136,7 @@ export function detect(text: string, ended = true): Format {
   if (lines.length < 2) return "lines";
   const tabs = lines.map((line) => line.split("\t").length - 1);
   if (tabs[0]! >= 1 && tabs.every((n) => n === tabs[0])) return "tsv";
-  const commas = lines.map((line) => csvFields(line, ",").length);
+  const commas = csvRecords(lines).map((record) => csvFields(record, ",").length);
   if (commas[0]! >= 2 && commas.every((n) => n === commas[0]) && !lines[0]!.includes("  ")) {
     return "csv";
   }
@@ -162,7 +166,22 @@ function looksLikeHeading(line: string): boolean {
   return words.every((word) => !/^[+-]?\d/.test(word) && !/[/=:]/.test(word) && word.length <= 32);
 }
 
-/** Splits one line of CSV that has no quoted line break: for telling the shape. */
+/** Lines joined where a quoted field holds a line break: the records of CSV, for telling the shape. */
+function csvRecords(lines: readonly string[]): string[] {
+  const records: string[] = [];
+  let open: string | undefined;
+  for (const line of lines) {
+    open = open === undefined ? line : `${open}\n${line}`;
+    if ((open.match(/"/g)?.length ?? 0) % 2 === 0) {
+      records.push(open);
+      open = undefined;
+    }
+  }
+  if (open !== undefined) records.push(open);
+  return records;
+}
+
+/** Splits one record of CSV: for telling the shape. */
 function csvFields(line: string, delimiter: string): string[] {
   const fields: string[] = [];
   let field = "";
@@ -529,14 +548,17 @@ class JsonParser implements Parser {
   }
 }
 
+/** The one array of objects an object holds, as an API's answer holds its rows; else undefined. */
+function rowsInside(value: Record<string, unknown>): unknown[] | undefined {
+  const arrays = Object.values(value).filter(
+    (item): item is unknown[] => Array.isArray(item) && item.length > 0 && item.every(isObject),
+  );
+  return arrays.length === 1 ? arrays[0] : undefined;
+}
+
 /** The rows of a JSON document: an array's elements, the one array of objects an object holds, or itself. */
 function elementsOf(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
-  if (isObject(value)) {
-    const arrays = Object.values(value).filter(
-      (item): item is unknown[] => Array.isArray(item) && item.length > 0 && item.every(isObject),
-    );
-    if (arrays.length === 1) return arrays[0]!;
-  }
+  if (isObject(value)) return rowsInside(value) ?? [value];
   return [value];
 }

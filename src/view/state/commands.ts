@@ -24,6 +24,8 @@ export interface Command {
   when?(): boolean;
   /** Not offered in the palette: moving the cursor is not something one searches for. */
   quiet?: boolean;
+  /** Other words the palette finds it by: "sort" for an order, "select" for a mark. */
+  also?: string;
 }
 
 const hasRows = () => get().shown.length > 0;
@@ -69,9 +71,17 @@ export const COMMANDS: Command[] = [
     run: () => act.page(-1),
     quiet: true,
   },
-  { id: "first", title: "First row", group: "Move", keys: ["Mod-ArrowUp"], run: act.first },
+  {
+    id: "first",
+    also: "top home beginning",
+    title: "First row",
+    group: "Move",
+    keys: ["Mod-ArrowUp"],
+    run: act.first,
+  },
   {
     id: "last",
+    also: "bottom end tail follow",
     title: "Last row, and follow new rows",
     group: "Move",
     keys: ["Mod-ArrowDown"],
@@ -113,6 +123,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "mark-shown",
+    also: "select all check",
     title: "Mark every row shown",
     group: "Mark",
     keys: ["Mod-a"],
@@ -120,14 +131,22 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "unmark",
+    also: "deselect clear none uncheck",
     title: "Unmark every row",
     group: "Mark",
     keys: ["Shift-Mod-a"],
     run: act.unmarkAll,
   },
-  { id: "invert", title: "Invert the marks of the rows shown", group: "Mark", run: act.invert },
+  {
+    id: "invert",
+    also: "select toggle reverse",
+    title: "Invert the marks of the rows shown",
+    group: "Mark",
+    run: act.invert,
+  },
   {
     id: "unmark-shown",
+    also: "deselect uncheck",
     title: "Unmark the rows shown",
     group: "Mark",
     run: () => act.markShown(false),
@@ -135,6 +154,7 @@ export const COMMANDS: Command[] = [
 
   {
     id: "send",
+    also: "choose accept ok done submit enter",
     title: "Send",
     group: "Send",
     keys: ["Enter"],
@@ -143,15 +163,23 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "back",
+    also: "escape clear",
     title: "Back: close, clear the query, then send nothing",
     group: "Send",
     keys: ["Escape"],
     run: act.back,
   },
-  { id: "cancel", title: "Send nothing and end", group: "Send", run: () => void act.cancel() },
+  {
+    id: "cancel",
+    also: "quit exit abort close nothing",
+    title: "Send nothing and end",
+    group: "Send",
+    run: () => void act.cancel(),
+  },
 
   {
     id: "order-clear",
+    also: "sort unsorted original",
     title: "Rows in the input's order",
     group: "Order",
     keys: ["Ctrl-0"],
@@ -167,6 +195,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "help",
+    also: "shortcuts keyboard f1 syntax",
     title: "Keys, the mouse and the query",
     group: "Panels",
     keys: ["F1"],
@@ -174,6 +203,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "panel",
+    also: "inspector sidebar preview details",
     title: "Show or hide the side panel",
     group: "Panels",
     keys: ["Mod-i"],
@@ -181,6 +211,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "tab-row",
+    also: "preview details fields",
     title: "The row the cursor is on",
     group: "Panels",
     keys: ["F2"],
@@ -188,6 +219,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "tab-column",
+    also: "histogram chart distribution values facets",
     title: "A column: its values, and a chart of its quantities",
     group: "Panels",
     keys: ["F3"],
@@ -195,6 +227,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "tab-output",
+    also: "stdout result command again script",
     title: "What goes out, and the command that does it again",
     group: "Panels",
     keys: ["F4"],
@@ -203,6 +236,7 @@ export const COMMANDS: Command[] = [
 
   {
     id: "copy-row",
+    also: "clipboard",
     title: "Copy the row",
     group: "Copy",
     keys: ["Mod-c"],
@@ -211,6 +245,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "copy-command",
+    also: "clipboard script cron",
     title: "Copy the command that does it again",
     group: "Copy",
     run: () => void act.copyText(act.again().line, "the command"),
@@ -244,25 +279,29 @@ export function paletteCommands(): Command[] {
   const columns: Command[] = table.columns.flatMap((name, column) => [
     {
       id: `sort:${column}`,
-      title: `Order by ${name}`,
+      title: `Order by ${name}, smallest or A first`,
+      also: "sort ascending",
       group: "Order",
       run: () => act.setOrder({ column, descending: false }),
     },
     {
       id: `sort-down:${column}`,
-      title: `Order by ${name}, descending`,
+      title: `Order by ${name}, largest or Z first`,
+      also: "sort descending reverse",
       group: "Order",
       run: () => act.setOrder({ column, descending: true }),
     },
     {
       id: `column:${column}`,
       title: `Look at the column ${name}`,
+      also: "histogram chart values",
       group: "Panels",
       run: () => act.showColumn(column),
     },
     {
       id: `field:${column}`,
       title: `Send the column ${name} (or stop sending it)`,
+      also: "field output only",
       group: "Send",
       run: () => act.toggleField(name),
     },

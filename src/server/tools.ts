@@ -13,7 +13,7 @@ import {
   registerAppTool,
 } from "@modelcontextprotocol/ext-apps/server";
 import { McpServer } from "@modelcontextprotocol/server";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 
@@ -27,15 +27,29 @@ import { commandFor, runPreview } from "./preview.ts";
 
 export const VIEW_URI = "ui://pickpen/view";
 
+/**
+ * The package's own directory: where its manifest is, above this file, whether it runs built
+ * (`dist/node/server`) or from its sources in the tests (`src/server`).
+ */
+const ROOT = (() => {
+  let dir = new URL("./", import.meta.url);
+  while (!existsSync(new URL("package.json", dir))) {
+    const parent = new URL("../", dir);
+    if (parent.href === dir.href) throw new Error("pickpen's package.json is not above its files");
+    dir = parent;
+  }
+  return dir;
+})();
+
 /** The view as the files `vite build` writes, for a terminal that keeps them by content. */
-export const VIEW_DIRECTORY = new URL("../../view/", import.meta.url);
+export const VIEW_DIRECTORY = new URL("dist/view/", ROOT);
 
 /** The view as one document, for a host that reads it with `resources/read`. */
-const VIEW_DOCUMENT = new URL("../../single/index.html", import.meta.url);
+const VIEW_DOCUMENT = new URL("dist/single/index.html", ROOT);
 
 /** The package's version, from its manifest: a release changes it there and nowhere else. */
 export const VERSION: string = JSON.parse(
-  readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
+  readFileSync(new URL("package.json", ROOT), "utf8"),
 ).version;
 
 /** How long a call for rows waits for the input before it answers with none. */
@@ -181,11 +195,7 @@ export function createServer(picker: Picker, options: Options, answer: Answer): 
         const mine = new AbortController();
         running = mine;
         ctx.mcpReq.signal.addEventListener("abort", () => mine.abort(), { once: true });
-        const result = await runPreview(
-          commandFor(template, record, picker.names),
-          width,
-          mine.signal,
-        );
+        const result = await runPreview(commandFor(template, record, picker), width, mine.signal);
         if (running === mine) running = undefined;
         return data(result, `Preview of row ${row}`);
       },

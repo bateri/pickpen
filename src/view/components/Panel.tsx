@@ -17,6 +17,7 @@ import { quantity, writeQuantity } from "../../shared/values";
 import type { Kind } from "../../shared/values";
 import type { OutputResult, PreviewResult } from "../../shared/wire";
 import { runs } from "../lib/ansi";
+import { label } from "../lib/keys";
 import { call } from "../lib/bridge";
 import * as act from "../state/actions";
 import { table } from "../state/data";
@@ -257,7 +258,7 @@ function ColumnTab() {
         <IconChevronDown size={13} stroke={2} />
       </button>
       {kind !== "text" ? <Chart column={column} kind={kind} ids={ids} /> : null}
-      <Values column={column} ids={ids} />
+      <Values column={column} ids={ids} limit={kind === "text" ? 40 : 12} />
     </div>
   );
 }
@@ -279,16 +280,27 @@ function Chart({ column, kind, ids }: { column: number; kind: Kind; ids: number[
     values.sort((a, b) => a - b);
     const min = values[0]!;
     const max = values.at(-1)!;
+    // Times, sizes and counts are often spread over orders of magnitude (most requests take
+    // milliseconds, a few seconds): then the chart is in logarithms, so that the many small
+    // values are not one bar and the few large ones are still seen.
+    const log = min > 0 && max / min >= 100;
+    const scale = log ? (v: number) => Math.log(v) : (v: number) => v;
+    const unscale = log ? (v: number) => Math.exp(v) : (v: number) => v;
+    const low = scale(min);
+    const span = scale(max) - low || 1;
     const bins = new Array<number>(BINS).fill(0);
-    const span = max - min || 1;
-    for (const v of values) bins[Math.min(BINS - 1, Math.floor(((v - min) / span) * BINS))]! += 1;
+    for (const v of values) {
+      bins[Math.min(BINS - 1, Math.floor(((scale(v) - low) / span) * BINS))]! += 1;
+    }
     return {
       min,
       max,
       median: values[Math.floor(values.length / 2)]!,
       bins,
-      count: values.length,
-      span,
+      log,
+      /** Where a value is across the chart, from 0 to 1, and the value at a place. */
+      place: (v: number) => (scale(v) - low) / span,
+      valueAt: (f: number) => unscale(low + f * span),
     };
   }, [ids, column, kind]);
 
@@ -298,7 +310,7 @@ function Chart({ column, kind, ids }: { column: number; kind: Kind; ids: number[
     const rect = area.current!.getBoundingClientRect();
     return Math.max(0, Math.min(1, (x - rect.left) / rect.width));
   };
-  const valueAt = (f: number) => stats.min + f * stats.span;
+  const { valueAt } = stats;
   const name = quoteName(table.columns[column] ?? "");
   const range = (() => {
     const parsed = parse(query, table.columns);
@@ -307,10 +319,7 @@ function Chart({ column, kind, ids }: { column: number; kind: Kind; ids: number[
     const low = quantity(term.range[0]);
     const high = quantity(term.range[1]);
     if (!low || !high) return null;
-    return [(low.value - stats.min) / stats.span, (high.value - stats.min) / stats.span] as [
-      number,
-      number,
-    ];
+    return [stats.place(low.value), stats.place(high.value)] as [number, number];
   })();
   const band = drag ?? range;
 
@@ -355,7 +364,7 @@ function Chart({ column, kind, ids }: { column: number; kind: Kind; ids: number[
                 ? (i + 0.5) / BINS >= Math.min(...band) && (i + 0.5) / BINS <= Math.max(...band)
                 : undefined
             }
-            style={{ height: `${n === 0 ? 0 : Math.max(4, (n / peak) * 100)}%` }}
+            style={{ height: `${n === 0 ? 0 : Math.max(4, Math.sqrt(n / peak) * 100)}%` }}
           />
         ))}
         {band ? (
@@ -370,14 +379,17 @@ function Chart({ column, kind, ids }: { column: number; kind: Kind; ids: number[
       </div>
       <div className="chart-scale">
         <span>{writeQuantity(kind, stats.min)}</span>
-        <span>median {writeQuantity(kind, stats.median)}</span>
+        <span>
+          median {writeQuantity(kind, stats.median)}
+          {stats.log ? " · log scale" : ""}
+        </span>
         <span>{writeQuantity(kind, stats.max)}</span>
       </div>
     </div>
   );
 }
 
-function Values({ column, ids }: { column: number; ids: number[] }) {
+function Values({ column, ids, limit }: { column: number; ids: number[]; limit: number }) {
   const query = useStore((s) => s.query);
   const values = useMemo(() => {
     const counts = new Map<string, number>();
@@ -393,7 +405,7 @@ function Values({ column, ids }: { column: number; ids: number[] }) {
     );
     return new Set(term && term.kind === "field" ? term.values.map((v) => v.toLowerCase()) : []);
   }, [query, column]);
-  const top = values.slice(0, 40);
+  const top = values.slice(0, limit);
   const most = top[0]?.[1] ?? 1;
   const name = quoteName(table.columns[column] ?? "");
 
@@ -540,7 +552,7 @@ function OutputTab() {
           ) : (
             <>
               <IconInfoCircle size={13} stroke={2} /> Sends the rows the query shows. Mark them (
-              <Keys spec="Mod-a" quiet />) to send the same now.
+              {label("Mod-a")}) to send the same now.
             </>
           )}
         </p>

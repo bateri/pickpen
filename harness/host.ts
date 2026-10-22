@@ -193,11 +193,12 @@ const INPUTS: [string, string][] = [
   ["demo/ps.txt", "--field PID"],
   ["demo/requests.jsonl", ""],
   ["demo/servers.csv", ""],
-  ["demo/commits.txt", "--preview 'printf \"%s\\n\" {}' --field 1"],
+  ["demo/commits.txt", "--field 1"],
   [
     "demo/pods.txt",
     "--where 'STATUS!=Running' --confirm --title 'Delete these pods?' --field NAME",
   ],
+  ["demo/files.txt", "--preview 'head -80 {}'"],
 ];
 const log = document.getElementById("log")!;
 const strip = document.getElementById("strip")!;

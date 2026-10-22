@@ -147,9 +147,42 @@ export function QueryBar() {
   );
 }
 
-/** What to type, with the input's own columns: `STATUS=Running`, `cpu>50`. */
+/**
+ * What to type, with the input's own columns and values: `STATUS=Running`, `AGE<1h`, from the
+ * column of words with the fewest values and the first column of quantities.
+ */
 function placeholderFor(columns: string[]): string {
-  if (columns.length <= 1) return "Type to filter: words, !word to leave out";
-  const name = columns.find((c) => /^[\p{L}\p{N}_%-]+$/u.test(c)) ?? columns[0]!;
-  return `Type to filter: words, !word, ${name}=value, ${name}>10 — F1 for more`;
+  if (columns.length <= 1) return "Type to filter: words, !word to leave out — F1 for more";
+  const examples: string[] = [];
+  const sample = table.rows.slice(0, 300);
+  let fewest: { name: string; value: string; distinct: number } | undefined;
+  columns.forEach((name, column) => {
+    if ((table.kinds[column] ?? "text") !== "text" || !/^[\p{L}\p{N}_%-]+$/u.test(name)) return;
+    const counts = new Map<string, number>();
+    for (const row of sample) {
+      const value = row.cells[column] ?? "";
+      if (value !== "") counts.set(value, (counts.get(value) ?? 0) + 1);
+    }
+    const [value] = [...counts].sort((a, b) => b[1] - a[1])[0] ?? [];
+    if (value === undefined || counts.size < 2 || !/^\p{L}[\p{L}\p{N}_-]*$/u.test(value)) return;
+    if (!fewest || counts.size < fewest.distinct) fewest = { name, value, distinct: counts.size };
+  });
+  if (fewest) examples.push(`${fewest.name}=${fewest.value}`);
+  const quantity = columns.findIndex(
+    (name, column) =>
+      (table.kinds[column] ?? "text") !== "text" && /^[\p{L}\p{N}_%-]+$/u.test(name),
+  );
+  if (quantity >= 0) {
+    const kind = table.kinds[quantity];
+    const bound =
+      kind === "duration"
+        ? "<1h"
+        : kind === "size"
+          ? ">1G"
+          : kind === "date"
+            ? ">2026-01-01"
+            : ">10";
+    examples.push(`${columns[quantity]}${bound}`);
+  }
+  return `Type to filter: words, !word${examples.map((e) => `, ${e}`).join("")} — F1 for more`;
 }
