@@ -140,7 +140,7 @@ export function detect(text: string, ended = true): Format {
   if (commas[0]! >= 2 && commas.every((n) => n === commas[0]) && !lines[0]!.includes("  ")) {
     return "csv";
   }
-  if (looksLikeHeading(lines[0]!) && columnStarts(lines[0]!, lines.slice(1)).length >= 2) {
+  if (looksLikeHeading(lines[0]!) && layoutOf(lines[0]!, lines.slice(1)).names.length >= 2) {
     return "columns";
   }
   return "lines";
@@ -163,7 +163,10 @@ function looksLikeHeading(line: string): boolean {
   const words = line.trim().split(/\s+/);
   if (words.length < 2 || words.length > 40) return false;
   if (!/^\p{Lu}/u.test(words[0]!)) return false;
-  return words.every((word) => !/^[+-]?\d/.test(word) && !/[/=:]/.test(word) && word.length <= 32);
+  // `SIZE/OFF` (lsof) and `I/O` head columns; `/usr/bin`, `a=1` and `10:00` are values.
+  return words.every(
+    (word) => !/^[+-]?\d/.test(word) && !/^[/.~]|[=:]/.test(word) && word.length <= 32,
+  );
 }
 
 /** Lines joined where a quoted field holds a line break: the records of CSV, for telling the shape. */
@@ -224,6 +227,43 @@ export function columnStarts(heading: string, lines: readonly string[]): number[
   // the heading's word: the first column still begins at 0.
   starts[0] = 0;
   return starts;
+}
+
+/**
+ * How a table lined up with spaces is cut into columns.
+ *
+ * Most commands keep their columns lined up under the headings (`docker ps`, `kubectl get`,
+ * `df`), and their values may hold spaces (`Up 2 hours`): those are cut where the columns are.
+ * Some let a wide value push the rest of its line to the right — `ps` on macOS does, with a
+ * twelve-digit VSZ — so that no column lines up after it; when the places find fewer columns
+ * than the heading has groups of words, and every line has a word for each heading, the line
+ * is split at its spaces instead, the last column taking the rest of it (`COMMAND`).
+ */
+export type Layout =
+  | { kind: "places"; starts: number[]; names: string[] }
+  | { kind: "words"; count: number; names: string[] };
+
+export function layoutOf(heading: string, lines: readonly string[]): Layout {
+  const starts = columnStarts(heading, lines);
+  const places: Layout = { kind: "places", starts, names: namesOf(cutColumns(heading, starts)) };
+  const groups = heading.trim().split(/\s{2,}/).length;
+  const words = heading.trim().split(/\s+/);
+  if (starts.length >= groups || words.length < 2) return places;
+  const fits = lines.every((line) => line.trim().split(/\s+/).length >= words.length);
+  return fits ? { kind: "words", count: words.length, names: namesOf(words) } : places;
+}
+
+/** A line split at its spaces into `count` cells, the last taking the rest of the line. */
+export function splitWords(line: string, count: number): string[] {
+  const cells: string[] = [];
+  let rest = line.trim();
+  while (cells.length < count - 1 && rest !== "") {
+    const match = /^(\S+)\s*/.exec(rest)!;
+    cells.push(match[1]!);
+    rest = rest.slice(match[0].length);
+  }
+  if (rest !== "") cells.push(rest);
+  return cells;
 }
 
 /** A line cut at the starts, each boundary moved to the nearest space when a word crosses it. */
@@ -321,7 +361,7 @@ class ColumnsParser implements Parser {
   #lines: LineParser;
   #heading: string | undefined;
   #waiting: string[] = [];
-  #starts: number[] | undefined;
+  #layout: Layout | undefined;
 
   readonly sink: Sink;
 
@@ -344,22 +384,25 @@ class ColumnsParser implements Parser {
 
   #line(line: string): void {
     if (this.#heading === undefined) this.#heading = line;
-    else if (this.#starts === undefined) this.#waiting.push(line);
+    else if (this.#layout === undefined) this.#waiting.push(line);
     else this.#emit(line);
   }
 
   #settle(ended = false): void {
-    if (this.#starts !== undefined || this.#heading === undefined) return;
+    if (this.#layout !== undefined || this.#heading === undefined) return;
     // A heading alone tells no column from a space inside a heading (`IMAGE ID`): wait for a line.
     if (this.#waiting.length === 0 && !ended) return;
-    this.#starts = columnStarts(this.#heading, this.#waiting.slice(0, 200));
-    this.sink.columns(namesOf(cutColumns(this.#heading, this.#starts)));
+    this.#layout = layoutOf(this.#heading, this.#waiting.slice(0, 200));
+    this.sink.columns(this.#layout.names);
     for (const line of this.#waiting) this.#emit(line);
     this.#waiting = [];
   }
 
   #emit(line: string): void {
-    this.sink.record({ cells: cutColumns(line, this.#starts!), raw: line });
+    const layout = this.#layout!;
+    const cells =
+      layout.kind === "places" ? cutColumns(line, layout.starts) : splitWords(line, layout.count);
+    this.sink.record({ cells, raw: line });
   }
 }
 

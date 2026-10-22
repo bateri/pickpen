@@ -61,6 +61,13 @@ test("the shape is read from the first lines", () => {
   assert.equal(detect(KUBECTL), "columns");
   assert.equal(detect(DF), "columns");
   assert.equal(detect(PS), "columns");
+  assert.equal(
+    detect(
+      "COMMAND   PID  USER   FD   TYPE  DEVICE SIZE/OFF NODE NAME\nnode    12345 me   21u  IPv4 0x1a2b      0t0  TCP *:3000 (LISTEN)\n",
+    ),
+    "columns",
+  );
+  assert.equal(detect("/usr/bin/a /usr/lib\n/usr/bin/b /usr/lib\n"), "lines");
   assert.equal(detect("name,age\nann,3\nbob,4\n"), "csv");
   assert.equal(detect("name\tage\nann\t3\n"), "tsv");
   assert.equal(detect('{"a":1}\n{"a":2}\n'), "jsonl");
@@ -147,6 +154,49 @@ test("ps's last column takes the rest of the line, spaces and all", () => {
   );
   assert.equal(cells[2]!.at(-1), "/System/Library/WindowServer -daemon");
   assert.equal(cells[0]![0], "kalaomer");
+});
+
+// As macOS prints it: a VSZ wider than its heading pushes the rest of the line to the right.
+const PS_MAC = `USER               PID  %CPU %MEM      VSZ    RSS   TT  STAT STARTED      TIME COMMAND
+_windowserver      394  45.9  1.0 104487033824 350624   ??  Rs   13Oct26 3046:43.05 /System/Library/WindowServer -daemon
+someone          45283  39.3  0.5 1980409632 177600   ??  S    Wed12PM 738:52.90 /Applications/Dia.app/Contents/MacOS/Dia --type=renderer
+root               123   0.0  0.0 408123456   1234   ??  Ss   Mon09AM   0:00.12 /usr/sbin/syslogd
+`;
+
+test("a table whose wide values push the line out of line is split at its spaces", () => {
+  assert.equal(detect(PS_MAC), "columns");
+  const { names, cells } = read(PS_MAC);
+  assert.deepEqual(names, [
+    "USER",
+    "PID",
+    "%CPU",
+    "%MEM",
+    "VSZ",
+    "RSS",
+    "TT",
+    "STAT",
+    "STARTED",
+    "TIME",
+    "COMMAND",
+  ]);
+  assert.deepEqual(cells[0], [
+    "_windowserver",
+    "394",
+    "45.9",
+    "1.0",
+    "104487033824",
+    "350624",
+    "??",
+    "Rs",
+    "13Oct26",
+    "3046:43.05",
+    "/System/Library/WindowServer -daemon",
+  ]);
+  assert.equal(cells[1]![10], "/Applications/Dia.app/Contents/MacOS/Dia --type=renderer");
+  assert.deepEqual(
+    cells.map((c) => c[1]),
+    ["394", "45283", "123"],
+  );
 });
 
 test("a later line wider than the first ones is cut at the nearest space", () => {
