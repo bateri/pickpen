@@ -51,7 +51,7 @@ devfs            204Ki   204Ki     0Bi   100%     706     0  100%   /dev
 `;
 
 const PS = `USER               PID  %CPU %MEM      VSZ    RSS   TT  STAT STARTED       TIME COMMAND
-kalaomer         71234  12.3  1.1 412345678 182736   ??  S    10:01AM   1:02.33 /Applications/Safari.app/Contents/MacOS/Safari
+deployer         71234  12.3  1.1 412345678 182736   ??  S    10:01AM   1:02.33 /Applications/Safari.app/Contents/MacOS/Safari
 root               123   0.0  0.0 408123456   1234   ??  Ss   Mon09AM   0:00.12 /usr/sbin/syslogd
 _windowserver     1534   4.1  0.7 413456789 123456   ??  Ss   Mon09AM  52:10.45 /System/Library/WindowServer -daemon
 `;
@@ -153,13 +153,13 @@ test("ps's last column takes the rest of the line, spaces and all", () => {
     ["71234", "123", "1534"],
   );
   assert.equal(cells[2]!.at(-1), "/System/Library/WindowServer -daemon");
-  assert.equal(cells[0]![0], "kalaomer");
+  assert.equal(cells[0]![0], "deployer");
 });
 
 // As macOS prints it: a VSZ wider than its heading pushes the rest of the line to the right.
 const PS_MAC = `USER               PID  %CPU %MEM      VSZ    RSS   TT  STAT STARTED      TIME COMMAND
 _windowserver      394  45.9  1.0 104487033824 350624   ??  Rs   13Oct26 3046:43.05 /System/Library/WindowServer -daemon
-someone          45283  39.3  0.5 1980409632 177600   ??  S    Wed12PM 738:52.90 /Applications/Dia.app/Contents/MacOS/Dia --type=renderer
+someone          45283  39.3  0.5 1980409632 177600   ??  S    Wed12PM 738:52.90 /Applications/Browser.app/Contents/MacOS/Browser --type=renderer
 root               123   0.0  0.0 408123456   1234   ??  Ss   Mon09AM   0:00.12 /usr/sbin/syslogd
 `;
 
@@ -192,7 +192,7 @@ test("a table whose wide values push the line out of line is split at its spaces
     "3046:43.05",
     "/System/Library/WindowServer -daemon",
   ]);
-  assert.equal(cells[1]![10], "/Applications/Dia.app/Contents/MacOS/Dia --type=renderer");
+  assert.equal(cells[1]![10], "/Applications/Browser.app/Contents/MacOS/Browser --type=renderer");
   assert.deepEqual(
     cells.map((c) => c[1]),
     ["394", "45283", "123"],
