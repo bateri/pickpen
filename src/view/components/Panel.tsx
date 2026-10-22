@@ -487,7 +487,7 @@ function OutputTab() {
   const order = useStore((s) => s.order);
   const fields = useStore((s) => s.fields);
   const boot = useStore((s) => s.boot)!;
-  useStore((s) => s.query);
+  const query = useStore((s) => s.query);
   useStore((s) => s.shown);
   const [out, setOut] = useState<{ text: string; error?: string } | null>(null);
   const rows = act.toSend();
@@ -529,30 +529,38 @@ function OutputTab() {
         <p className="again" data-kind={again.kind}>
           {again.kind === "same" ? (
             <>
-              <IconCheck size={13} stroke={2.5} /> Sends the same {plural(again.rows, "row")}: every
-              row the query shows is marked, and no other.
+              <IconCheck size={13} stroke={2.5} /> Sends the same {plural(again.rows, "row")}: the
+              ones marked are the ones {again.where.trim() === "" ? "there are" : "it matches"}.
             </>
           ) : again.kind === "different" ? (
             <>
-              <IconInfoCircle size={13} stroke={2} /> Would send the {plural(again.rows, "row")} the
-              query shows; {count(again.chosen)} {again.chosen === 1 ? "is" : "are"} marked.{" "}
-              <button
-                type="button"
-                className="link"
-                onMouseDown={keepFocus}
-                onClick={() => {
-                  act.unmarkAll();
-                  act.markShown(true);
-                }}
-                tabIndex={-1}
-              >
-                Mark just the rows shown
-              </button>
+              <IconInfoCircle size={13} stroke={2} /> Would send{" "}
+              {again.where.trim() === ""
+                ? "every row"
+                : `the ${plural(again.rows, "row")} it matches`}
+              ; {count(again.chosen)} {again.chosen === 1 ? "is" : "are"} marked, by hand.{" "}
+              {again.where === query ? (
+                <button
+                  type="button"
+                  className="link"
+                  onMouseDown={keepFocus}
+                  onClick={() => {
+                    act.unmarkAll();
+                    act.markShown(true);
+                  }}
+                  tabIndex={-1}
+                >
+                  Mark just the rows shown
+                </button>
+              ) : null}
             </>
           ) : (
             <>
-              <IconInfoCircle size={13} stroke={2} /> Sends the rows the query shows. Mark them (
-              {label("Mod-a")}) to send the same now.
+              <IconInfoCircle size={13} stroke={2} /> Sends{" "}
+              {again.where.trim() === "" ? "every row" : "the rows it matches"}.
+              {again.where === query ? (
+                <> Mark them ({label("Mod-a")}) to send the same now.</>
+              ) : null}
             </>
           )}
         </p>

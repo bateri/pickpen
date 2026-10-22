@@ -420,34 +420,56 @@ export function resetFields(): void {
 // ---- the command that does it again ----------------------------------------------------
 
 export type Again =
-  | { kind: "same"; line: string; rows: number }
-  | { kind: "different"; line: string; rows: number; chosen: number }
-  | { kind: "none"; line: string };
+  | { kind: "same"; line: string; rows: number; where: string }
+  | { kind: "different"; line: string; rows: number; chosen: number; where: string }
+  | { kind: "none"; line: string; where: string };
 
 /**
- * The command line for the query as it is, and whether it chooses what Send would send:
- * it does when every row the query matches is marked and nothing else is.
+ * The command line that does again what Send would do, with nobody to ask, and whether it
+ * does: it does when the rows marked are exactly the rows a query matches — the query typed,
+ * or, with `--confirm`, the rule the rows were marked by.
  */
 export function again(): Again {
-  const { query, order, boot, marked, fields } = get();
+  const { query, order, boot, marked, fields, shown } = get();
   const given = boot?.given ?? {};
   const field = fields ?? given.field;
-  const line = commandLine({
-    ...(given.input ? { input: given.input } : {}),
-    where: query,
-    ...(order
-      ? { sort: { column: table.columns[order.column] ?? "", descending: order.descending } }
-      : {}),
-    ...(field && field.length > 0 ? { field } : {}),
-    ...(given.format ? { format: given.format } : {}),
-    ...(given.output ? { output: given.output } : {}),
-  });
-  const { shown } = get();
-  if (marked.size === 0) return { kind: "none", line };
-  if (marked.size === shown.length && shown.every((id) => marked.has(id))) {
-    return { kind: "same", line, rows: shown.length };
+  const lineFor = (where: string) =>
+    commandLine({
+      ...(given.input ? { input: given.input } : {}),
+      where,
+      ...(order
+        ? { sort: { column: table.columns[order.column] ?? "", descending: order.descending } }
+        : {}),
+      ...(field && field.length > 0 ? { field } : {}),
+      ...(given.format ? { format: given.format } : {}),
+      ...(given.output ? { output: given.output } : {}),
+    });
+  const queries: { where: string; ids: () => number[] }[] = [{ where: query, ids: () => shown }];
+  if (ruleSource !== null && ruleSource.trim() !== query.trim()) {
+    const rule = ruleSource;
+    queries.push({ where: rule, ids: () => matching(parsed(rule)) });
   }
-  return { kind: "different", line, rows: shown.length, chosen: marked.size };
+  // The query typed says what is meant once there is one; until then, the rule does.
+  const main = query.trim() === "" && queries[1] ? queries[1] : queries[0]!;
+  if (marked.size === 0) return { kind: "none", line: lineFor(main.where), where: main.where };
+  for (const candidate of queries) {
+    const ids = candidate.ids();
+    if (marked.size === ids.length && ids.every((id) => marked.has(id))) {
+      return {
+        kind: "same",
+        line: lineFor(candidate.where),
+        rows: ids.length,
+        where: candidate.where,
+      };
+    }
+  }
+  return {
+    kind: "different",
+    line: lineFor(main.where),
+    rows: main.ids().length,
+    chosen: marked.size,
+    where: main.where,
+  };
 }
 
 export async function copyText(text: string, what: string): Promise<void> {
