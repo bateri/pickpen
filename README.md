@@ -83,19 +83,19 @@ Typing always goes to the query; the commands are on keys that do not type. Ever
 do the mouse does too, the bottom line has the keys that matter most (each one a button), and
 `F1` lists them all.
 
-|                      |                                                                   |
-| -------------------- | ----------------------------------------------------------------- |
-| `↑` `↓` / `⌃P` `⌃N`  | move; `PgUp` `PgDn` a page, `⌘↑` `⌘↓` the first and the last row  |
-| `Tab` `⇧Tab`         | mark the row and go on (space types a space)                      |
-| `⇧↑` `⇧↓`            | mark a run of rows                                                |
-| `⌘A`, `⇧⌘A`          | mark every row shown, unmark every row                            |
-| `⏎`                  | send: the marked rows, or the row under the cursor                |
-| `Esc`                | back: close what is open, then clear the query, then send nothing |
-| `⌃1`–`⌃9`, `⌃0`      | order by that column (again for the other way), the input's order |
-| `⌘K`                 | every command, a column's own among them                          |
-| `⌘I`, `F2` `F3` `F4` | the side panel: the row, a column, what goes out                  |
-| `⌘C`                 | copy the row                                                      |
-| `⌃C`                 | quit, sending nothing                                             |
+|                      |                                                                                                      |
+| -------------------- | ---------------------------------------------------------------------------------------------------- |
+| `↑` `↓` / `⌃P` `⌃N`  | move; `PgUp` `PgDn` a page, `⌘↑` `⌘↓` the first and the last row                                     |
+| `Tab` `⇧Tab`         | mark the row and go on (space types a space)                                                         |
+| `⇧↑` `⇧↓`            | mark a run of rows                                                                                   |
+| `⌘A`, `⇧⌘A`          | mark every row shown, unmark every row                                                               |
+| `⏎`                  | send: the marked rows, or the row under the cursor                                                   |
+| `Esc`                | back: close what is open, then clear the query, then send nothing (asked twice when rows are marked) |
+| `⌃1`–`⌃9`, `⌃0`      | order by that column (again for the other way), the input's order                                    |
+| `⌘K`                 | every command, a column's own among them                                                             |
+| `⌘I`, `F2` `F3` `F4` | the side panel: the row, a column, what goes out                                                     |
+| `⌘C`                 | copy the row                                                                                         |
+| `⌃C`                 | quit, sending nothing                                                                                |
 
 The box in front of a row marks it, and a drag down the boxes marks every row it passes;
 ⌘-click marks one row and ⇧-click a run; a double-click sends the row when nothing is marked

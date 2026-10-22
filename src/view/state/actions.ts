@@ -128,9 +128,8 @@ function takeBatch(batch: Batch): void {
     set({ marked });
   }
   const state = get();
-  if (columnsChanged || state.widths.length !== table.columns.length) {
-    set({ widths: widthsFor(state.widths) });
-  }
+  // Widths follow the first rows as they come; a column resized by hand keeps its width.
+  if (columnsChanged || from < 300) set({ widths: widthsFor(state.widths) });
   if (columnsChanged || state.order !== null) {
     // A sorted list takes new rows into their places at most a few times a second.
     if (columnsChanged || from === 0) refilter(false);
@@ -156,11 +155,21 @@ function takeBatch(batch: Batch): void {
   set({ version: get().version + 1 });
 }
 
+/** The columns the person resized, by place: their widths are theirs. */
+const resized = new Set<number>();
+
+export function resizeColumn(column: number, width: number): void {
+  resized.add(column);
+  const widths = [...get().widths];
+  widths[column] = Math.max(36, Math.round(width));
+  set({ widths });
+}
+
 /** Widths for columns, from their names and first rows, in the characters of the list's font. */
 function widthsFor(known: number[]): number[] {
   const char = charWidth();
   return table.columns.map((name, column) => {
-    if (known[column] !== undefined && known.length === table.columns.length) return known[column]!;
+    if (resized.has(column) && known[column] !== undefined) return known[column]!;
     let longest = name.length + 2;
     const end = Math.min(table.rows.length, 300);
     for (let at = 0; at < end; at++) {

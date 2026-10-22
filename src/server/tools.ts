@@ -114,8 +114,9 @@ export function createServer(picker: Picker, options: Options, answer: Answer): 
     server,
     "show_picker",
     {
-      // What a terminal writes above the view, in place of `show_picker`.
-      title: options.title ?? "Pick",
+      // What a terminal writes above the view, in place of `show_picker`: the same for every
+      // run, as a program's name is; `--title` is the view's to say, at its top.
+      title: "Pick",
       description: "Show the rows of the input, for a person to choose from",
       _meta: { ui: { resourceUri: VIEW_URI } },
     },

@@ -322,11 +322,7 @@ export function Rows() {
     event.stopPropagation();
     const start = event.clientX;
     const from = widths[column] ?? 80;
-    const moved = (e: MouseEvent) => {
-      const next = [...get().widths];
-      next[column] = Math.max(36, Math.round(from + e.clientX - start));
-      set({ widths: next });
-    };
+    const moved = (e: MouseEvent) => act.resizeColumn(column, from + e.clientX - start);
     const done = () => {
       window.removeEventListener("mousemove", moved);
       window.removeEventListener("mouseup", done);
