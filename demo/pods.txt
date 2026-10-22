@@ -1,0 +1,28 @@
+NAME                              READY   STATUS             RESTARTS        AGE
+api-7431ef2f0c-dtgxr              1/1     Running            0               53m
+api-7431ef2f0c-5ppws              0/1     Completed          0               20m
+web-2883e51d31-tspq7              0/1     CrashLoopBackOff   22 (6m ago)     23m
+web-2883e51d31-b6kgl              1/1     Running            0               40m
+web-2883e51d31-2gzbq              1/1     Running            3 (6h ago)      1d3h
+web-2883e51d31-j6n2c              1/1     Running            1 (3h ago)      8d14h
+worker-3cbf0eec06-z5msl           0/1     Error              0               12m
+worker-3cbf0eec06-hn77j           1/1     Running            2 (2h ago)      7d7h
+worker-3cbf0eec06-9gvbn           1/1     Running            0               52m
+worker-3cbf0eec06-tv98g           0/1     Error              0               7d14h
+billing-2e71d56062-7wsgm          1/1     Running            0               16m
+billing-2e71d56062-4kt2f          0/1     CrashLoopBackOff   33 (6m ago)     4d6h
+search-306b8f6ab1-wlqjm           1/1     Running            3 (3h ago)      8d17h
+search-306b8f6ab1-rrqjp           0/1     Error              0               6d3h
+auth-0db503989e-l99k7             1/1     Running            2 (5h ago)      6d22h
+auth-0db503989e-z4cc4             1/1     Running            0               2d11h
+auth-0db503989e-5w667             0/1     Completed          0               47m
+auth-0db503989e-h6wxm             1/1     Running            0               47m
+mailer-1a3d5d1817-62dq7           0/1     CrashLoopBackOff   17 (2m ago)     9d9h
+mailer-1a3d5d1817-r6txh           1/1     Running            0               4d1h
+mailer-1a3d5d1817-mx8f8           1/1     Running            0               3d4h
+scheduler-5293a8bf01-gk6d2        1/1     Running            0               2d16h
+scheduler-5293a8bf01-p29fs        1/1     Running            0               4d6h
+scheduler-5293a8bf01-dcl4z        0/1     CrashLoopBackOff   22 (5m ago)     4m
+cache-83eb058819-26fss            0/1     CrashLoopBackOff   5 (4m ago)      41m
+cache-83eb058819-jcqqw            1/1     Running            1 (14h ago)     7d7h
+cache-83eb058819-8krzt            0/1     Completed          0               15m

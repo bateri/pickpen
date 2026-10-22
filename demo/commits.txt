@@ -1,0 +1,60 @@
+17c4ef9 Read the search index warm after a deploy
+5032f61 Move the mailer's bounce handling to its own worker
+956996b Drop the old export endpoint
+9cdad96 Write the old export endpoint
+0a922de Show the mailer's bounce handling to its own worker
+81ffba0 Drop the order total when a coupon is applied twice
+39d550d Tell the session alive across a password change
+ed68db4 Drop the session alive across a password change
+0e8ddf8 Write invoices as PDF from the account page
+4aa7af3 Move the search index warm after a deploy
+e58a1fc Show the search index warm after a deploy
+6cd2baa Keep the cart when the user signs in on another device
+07f077c Write a retry for the payment provider's 503
+f50c099 Let the search index warm after a deploy
+7520163 Add invoices as PDF from the account page
+40653a5 Tell the search index warm after a deploy
+be97a7c Move the search index warm after a deploy
+36f4dfc Let invoices as PDF from the account page
+d74cfa9 Show a retry for the payment provider's 503
+2c2e76a Keep the search index warm after a deploy
+f859669 Write the old export endpoint
+035919e Add invoices as PDF from the account page
+2134220 Fix a retry for the payment provider's 503
+ac87634 Tell the cart when the user signs in on another device
+f4110c2 Drop the cart when the user signs in on another device
+91b41fd Fix invoices as PDF from the account page
+84a4b80 Tell the session alive across a password change
+6aa012b Add invoices as PDF from the account page
+14de096 Let invoices as PDF from the account page
+314b2cb Move the queue's depth in the health check
+5128c9a Let the search index warm after a deploy
+987ea12 Drop the queue's depth in the health check
+0a5ee92 Let the search index warm after a deploy
+73d7dad Fix the order total when a coupon is applied twice
+dec8c70 Let the session alive across a password change
+48487ab Fix the mailer's bounce handling to its own worker
+e17bff6 Keep invoices as PDF from the account page
+6cb6732 Move the order total when a coupon is applied twice
+61ef0bd Tell the order total when a coupon is applied twice
+3076155 Fix the user what failed in the import
+b6ab3f1 Add the order total when a coupon is applied twice
+63b17dd Fix the old export endpoint
+cad7aad Fix the queue's depth in the health check
+45cc5ac Show invoices as PDF from the account page
+780e91a Move a retry for the payment provider's 503
+daf54ed Fix the order total when a coupon is applied twice
+b002492 Move the search index warm after a deploy
+d4f2344 Move the session alive across a password change
+55bed20 Drop the queue's depth in the health check
+9a5cc03 Keep a retry for the payment provider's 503
+de32c7a Fix the session alive across a password change
+c5ee6c8 Keep the user what failed in the import
+62f4504 Let the old export endpoint
+296f02f Fix a retry for the payment provider's 503
+8102ab2 Read the search index warm after a deploy
+1289e36 Keep the mailer's bounce handling to its own worker
+21fc91a Keep the cart when the user signs in on another device
+36f7669 Add the session alive across a password change
+6caf528 Write the session alive across a password change
+cd66594 Fix the mailer's bounce handling to its own worker

@@ -1,0 +1,65 @@
+name,region,role,cpu,memory,disk,uptime,owner
+db-01,eu-central-1,db,77%,45.6GiB,866GiB,131d,search
+db-02,us-east-1,db,61%,10.0GiB,204GiB,167d,platform
+cache-03,us-east-1,cache,87%,55.3GiB,231GiB,13d,"growth, emea"
+cache-04,eu-west-1,cache,44%,34.1GiB,1633GiB,104d,"growth, emea"
+web-05,ap-south-1,web,81%,54.6GiB,573GiB,61d,payments
+queue-06,ap-south-1,queue,92%,61.6GiB,901GiB,102d,"growth, emea"
+queue-07,eu-west-1,queue,56%,17.8GiB,1239GiB,63d,platform
+db-08,ap-south-1,db,31%,33.4GiB,597GiB,81d,search
+queue-09,ap-south-1,queue,47%,7.3GiB,765GiB,115d,search
+api-10,eu-central-1,api,30%,55.1GiB,729GiB,64d,platform
+queue-11,eu-central-1,queue,33%,33.6GiB,718GiB,69d,"growth, emea"
+cache-12,us-east-1,cache,8%,2.9GiB,1777GiB,45d,platform
+cache-13,us-east-1,cache,10%,30.4GiB,682GiB,3d,platform
+web-14,eu-central-1,web,67%,46.2GiB,1562GiB,159d,payments
+queue-15,ap-south-1,queue,86%,23.9GiB,464GiB,10d,platform
+db-16,eu-west-1,db,94%,30.9GiB,1067GiB,142d,platform
+queue-17,eu-central-1,queue,77%,49.1GiB,1620GiB,159d,"growth, emea"
+api-18,eu-central-1,api,45%,29.7GiB,1968GiB,38d,payments
+queue-19,eu-west-1,queue,29%,41.2GiB,72GiB,83d,payments
+api-20,eu-west-1,api,89%,49.2GiB,1245GiB,72d,payments
+batch-21,ap-south-1,batch,15%,25.1GiB,719GiB,95d,platform
+cache-22,eu-west-1,cache,73%,48.4GiB,1060GiB,79d,search
+api-23,eu-central-1,api,1%,4.9GiB,390GiB,177d,search
+cache-24,ap-south-1,cache,73%,18.6GiB,1239GiB,106d,"growth, emea"
+web-25,us-east-1,web,1%,43.3GiB,121GiB,79d,search
+api-26,us-east-1,api,20%,54.5GiB,139GiB,42d,platform
+queue-27,eu-central-1,queue,39%,20.3GiB,855GiB,128d,"growth, emea"
+web-28,ap-south-1,web,87%,16.7GiB,1014GiB,104d,platform
+cache-29,eu-central-1,cache,80%,55.7GiB,518GiB,99d,platform
+cache-30,us-east-1,cache,90%,31.8GiB,743GiB,63d,platform
+queue-31,eu-west-1,queue,58%,16.4GiB,569GiB,169d,search
+batch-32,ap-south-1,batch,84%,51.0GiB,1100GiB,49d,platform
+queue-33,ap-south-1,queue,30%,4.6GiB,97GiB,93d,platform
+batch-34,eu-west-1,batch,91%,4.8GiB,181GiB,16d,"growth, emea"
+api-35,eu-west-1,api,20%,32.8GiB,1613GiB,138d,payments
+queue-36,eu-west-1,queue,53%,40.8GiB,102GiB,78d,"growth, emea"
+batch-37,eu-west-1,batch,49%,42.9GiB,598GiB,16d,platform
+web-38,eu-west-1,web,27%,51.6GiB,1984GiB,26d,platform
+queue-39,ap-south-1,queue,21%,40.8GiB,1675GiB,33d,search
+api-40,eu-central-1,api,23%,4.2GiB,1889GiB,167d,payments
+queue-41,us-east-1,queue,12%,44.8GiB,876GiB,15d,payments
+db-42,eu-central-1,db,81%,36.1GiB,1740GiB,80d,platform
+db-43,ap-south-1,db,46%,58.8GiB,1237GiB,20d,search
+db-44,eu-west-1,db,68%,21.2GiB,1149GiB,67d,"growth, emea"
+web-45,us-east-1,web,25%,14.6GiB,487GiB,91d,"growth, emea"
+web-46,ap-south-1,web,40%,47.8GiB,408GiB,148d,"growth, emea"
+cache-47,us-east-1,cache,9%,19.0GiB,1503GiB,37d,platform
+queue-48,us-east-1,queue,85%,40.2GiB,1584GiB,127d,payments
+db-49,us-east-1,db,46%,15.7GiB,622GiB,155d,payments
+db-50,eu-west-1,db,54%,33.9GiB,638GiB,106d,"growth, emea"
+batch-51,ap-south-1,batch,3%,52.6GiB,1465GiB,95d,platform
+queue-52,ap-south-1,queue,95%,28.9GiB,771GiB,41d,"growth, emea"
+web-53,eu-west-1,web,95%,58.9GiB,141GiB,143d,search
+api-54,eu-central-1,api,21%,61.7GiB,1532GiB,93d,"growth, emea"
+api-55,eu-central-1,api,52%,22.0GiB,1005GiB,52d,payments
+queue-56,eu-west-1,queue,4%,26.2GiB,920GiB,61d,"growth, emea"
+web-57,us-east-1,web,46%,41.2GiB,788GiB,82d,"growth, emea"
+api-58,us-east-1,api,32%,26.9GiB,1853GiB,110d,platform
+web-59,eu-central-1,web,18%,18.4GiB,1587GiB,55d,payments
+api-60,eu-west-1,api,18%,27.0GiB,344GiB,5d,search
+cache-61,eu-west-1,cache,64%,25.0GiB,498GiB,45d,search
+api-62,ap-south-1,api,74%,35.5GiB,380GiB,134d,"growth, emea"
+batch-63,eu-central-1,batch,82%,20.3GiB,539GiB,163d,platform
+api-64,eu-central-1,api,24%,6.3GiB,121GiB,120d,platform

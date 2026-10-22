@@ -1,0 +1,24 @@
+USER          PID %CPU %MEM      VSZ     RSS TTY      STAT START   TIME COMMAND
+root            1 60.4 10.3   784638  601181 ?        Sl   09:12  94:57 /sbin/init
+deploy        627  2.1  7.2  1813183  167555 ?        Ssl  09:12  64:01 /usr/lib/systemd/systemd-journald
+root          894  1.5  3.1  1479954  300519 ?        S    Oct20  38:41 /usr/sbin/sshd -D
+deploy       1577 59.7  9.2  1905683  699107 ?        S<   09:12  16:57 sshd: deploy [priv]
+root         2097  1.6  6.3  2155100  627366 pts/0    Ssl  Oct20  33:03 -bash
+deploy       2508  1.2  7.5   262748  231921 ?        Ssl  Oct20 107:09 node /srv/api/dist/server.js --port 8080
+deploy       2790  2.7  2.3  1869911  821892 ?        S<   Oct20   7:41 node /srv/api/dist/worker.js --queue mail
+postgres     3642  2.7  1.9  1481771  401014 ?        Ss   Oct20  76:22 postgres: 16/main: checkpointer
+postgres     4019  2.1  7.7  1900313  650073 ?        Ss   Oct21  90:49 postgres: 16/main: walwriter
+postgres     4845  3.2 11.7   414488  544878 ?        S<   Oct20  38:02 postgres: app orders 10.0.0.12(53122) idle
+redis        5730  1.1  1.9  1664477  663161 ?        Sl   09:12  31:47 redis-server *:6379
+deploy       5750  2.7  4.1   661487   21280 ?        S<   11:40  38:09 /usr/bin/dockerd -H fd://
+deploy       6189  1.5 11.7  1232702  443954 ?        S<   09:12  74:48 containerd --config /etc/containerd/config.toml
+root         6255 46.3  7.2  1601345  349353 ?        S<   Oct20  90:53 nginx: master process /usr/sbin/nginx
+www-data     6954  2.5  3.9  1224540  560227 ?        S<   Oct20  26:07 nginx: worker process
+www-data     7144  0.9  1.9   725744  348150 ?        Ss   09:12  64:58 nginx: worker process
+www-data     7507  2.2  2.7   111856  842776 ?        S<   Oct21  40:00 nginx: worker process
+www-data     7704  2.0 11.7  1539462  498447 ?        R    Oct21  39:04 nginx: worker process
+root         7872  1.8 11.7  2109549  646448 ?        S<   Oct20  75:47 python3 /opt/reports/nightly.py --since 2026-10-21
+deploy       8298  3.0 12.0  2163334  583299 ?        Ssl  11:40   0:51 /usr/bin/prometheus --config.file=/etc/prometheus.yml
+root         8309  0.1  6.4  1738956  391120 pts/0    Ss   Oct21  58:24 vim /etc/nginx/sites-enabled/app.conf
+deploy       9126  2.3  4.9  1392107  130050 pts/0    Ss   09:12  81:54 tail -f /var/log/nginx/access.log
+deploy       9660 19.3  8.4   793229  549300 ?        Ss   11:40 114:30 cron -f

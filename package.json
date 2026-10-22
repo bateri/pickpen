@@ -1,0 +1,67 @@
+{
+  "name": "pickpen",
+  "version": "0.0.0",
+  "description": "Choose rows in the middle of a pipeline, in a real interface in the terminal pane, with the keyboard or the mouse, over plain ssh",
+  "license": "GPL-3.0-or-later",
+  "keywords": [
+    "picker",
+    "pipeline",
+    "fuzzy",
+    "table",
+    "terminal",
+    "mcp-apps",
+    "pencere",
+    "ssh"
+  ],
+  "type": "module",
+  "bin": {
+    "pickpen": "./dist/node/server/main.js"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "npm run build:view && npm run build:node",
+    "build:view": "vite build && vite build --mode single",
+    "build:node": "tsc -p tsconfig.node.json",
+    "harness": "npm run build:node && vite --mode harness",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "test": "npm run build && node --test 'test/*.test.ts'",
+    "prepack": "npm run build"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^2.0.3",
+    "@modelcontextprotocol/server": "^2.3.1",
+    "@pencere/sdk": "^0.1.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.3.1",
+    "@tabler/icons-react": "^3.49.0",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "prettier": "^3.6.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.5",
+    "vite-plugin-singlefile": "^2.3.4",
+    "zustand": "^5.0.15"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bateri/pickpen.git"
+  },
+  "homepage": "https://github.com/bateri/pickpen#readme",
+  "bugs": {
+    "url": "https://github.com/bateri/pickpen/issues"
+  }
+}
