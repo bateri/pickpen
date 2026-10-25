@@ -1,0 +1,5 @@
+local t = require("t")
+t.test("the harness runs", function()
+	t.eq({ 1, 2, { a = "x" } }, { 1, 2, { a = "x" } })
+	t.raises(function() error("boom") end, "boom")
+end)
