@@ -5,6 +5,12 @@
 -- process, and the pointer, the keys and the layout are whatever a test says they are. There is no
 -- layout engine here: a test says what is under the pointer (`host.over`) and where an element is
 -- (`host.boxes`).
+--
+-- The page is several scripts: the entry (`view/page.lua`) and the ones it `require`s, which are
+-- found as the terminal's sandbox finds them (Luau's rules for requiring by string: a path that
+-- starts with `./` or `../`, relative to the requiring script, naming `name.luau`, `name.lua`,
+-- `name/init.luau` or `name/init.lua`; `@self/` in an `init` script is its own directory), run
+-- once each with globals of their own, and what they return is what every `require` gives.
 
 local pencere = require("pencere")
 local json = pencere.json
@@ -93,9 +99,49 @@ function M.pressables(tree)
 	return out
 end
 
--- `calls`: the handlers of the program's calls (`api` modules' `calls(session)` merged); `topics`
--- the same for topics. Gives the host: `host:render()`, `host:event(e)`, `host:pump()`.
-function M.new(page_source, calls, topics, size)
+-- The path of the script a `require` of `name` names from the script at `from` (both as the files
+-- of the app are called: `view/parts/x.lua`), or nil and why not.
+local function resolve(from, name)
+	local directory = string.match(from, "^(.*)/[^/]*$") or ""
+	local base = string.match(from, "([^/]*)$")
+	local relative
+	if string.sub(name, 1, 6) == "@self/" then
+		relative = (directory ~= "" and (directory .. "/") or "") .. string.sub(name, 7)
+	else
+		if string.sub(name, 1, 2) ~= "./" and string.sub(name, 1, 3) ~= "../" then
+			return nil, "a path starts with ./ or ../"
+		end
+		-- Within an `init` script `./` is relative to the directory's parent.
+		if string.match(base, "^init%.luau?$") then
+			directory = string.match(directory, "^(.*)/[^/]*$") or ""
+		end
+		relative = (directory ~= "" and (directory .. "/") or "") .. name
+	end
+	local parts = {}
+	for piece in string.gmatch(relative, "[^/]+") do
+		if piece == ".." then
+			if #parts == 0 then
+				return nil, "a path out of the bundle"
+			end
+			parts[#parts] = nil
+		elseif piece ~= "." then
+			parts[#parts + 1] = piece
+		end
+	end
+	local path = table.concat(parts, "/")
+	for _, candidate in ipairs({ ".luau", ".lua", "/init.luau", "/init.lua" }) do
+		if pencere.app.exists(path .. candidate) then
+			return path .. candidate
+		end
+	end
+	return nil, "nothing at " .. path
+end
+M.resolve = resolve
+
+-- `entry`: the path of the page's entry script in the app (`view/page.lua`). `calls`: the handlers
+-- of the program's calls (`api` modules' `calls(session)` merged); `topics` the same for topics.
+-- Gives the host: `host:render()`, `host:event(e)`, `host:pump()`.
+function M.new(entry, calls, topics, size)
 	local kit_dir = pencere.env.get("PENCERE_KIT")
 	assert(kit_dir, "PENCERE_KIT names the directory of the kit's prelude (kit/luau/prelude)")
 	local host = {
@@ -149,9 +195,34 @@ function M.new(page_source, calls, topics, size)
 		setfenv(chunk, env)
 		chunk()
 	end
-	local chunk = assert(loadstring(page_source, "@page.lua"))
-	setfenv(chunk, env)
-	local page = chunk()
+	-- The scripts the page requires, each run once with globals of its own.
+	local loaded, loading = {}, {}
+	local function run(path)
+		local source = pencere.app.read(path)
+		local chunk = assert(loadstring(source, "@" .. path))
+		local own = setmetatable({ pencere = kit }, { __index = _G })
+		own.require = function(name)
+			local found, why = resolve(path, name)
+			if not found then
+				error("require " .. name .. ": " .. why, 2)
+			end
+			if found == entry then
+				error("require " .. name .. ": the entry is not a module", 2)
+			end
+			if loading[found] then
+				error("require cycle: " .. path .. " -> " .. found, 2)
+			end
+			if loaded[found] == nil then
+				loading[found] = true
+				loaded[found] = { run(found) }
+				loading[found] = nil
+			end
+			return loaded[found][1]
+		end
+		setfenv(chunk, own)
+		return chunk()
+	end
+	local page = run(entry)
 	kit.start(page)
 	host.kit = kit
 

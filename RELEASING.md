@@ -27,7 +27,8 @@ program, page and icons packed into it. So a release needs:
   release, `pencere build --target` fetches the runner of a target itself and `make dist` stops
   asking for `RUNNERS`. The runner has to be one that reads standard input as it arrives
   (`io.read_stdin`), shows a filter's view (`serve{ filter = true }`), starts a program in a session
-  of its own (`session = true`) and ends its view (`close_view`).
+  of its own (`session = true`), ends its view (`close_view`) and packs a page of several files
+  (pencere `main` from `bebc1d2` has all of it).
 - `gh`, logged in, to make the GitHub release.
 
 The files are built on the maintainer's machine and not by a workflow: an executable that a

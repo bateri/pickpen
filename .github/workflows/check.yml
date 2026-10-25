@@ -1,8 +1,9 @@
 # The gate on every push to main and every pull request: `make check`, on Linux and macOS, the two
 # systems pickpen runs on. pickpen is one file made by pencere's Lua runner, and until pencere has
-# a release the runner is built here from the branch of pencere that has what pickpen needs of it
-# (`io.read_stdin`, `io.is_terminal`, `serve{ filter = true }`, `close_view`, `session = true`). When
-# pencere has a release with them, this fetches the runner instead and the build goes away.
+# a release the runner is built here from the commit of pencere that has what pickpen needs of it
+# (`io.read_stdin`, `io.is_terminal`, `serve{ filter = true }`, `close_view`, `session = true`, a
+# page that `require`s its own files). When pencere has a release with them, this fetches the runner
+# instead and the build goes away.
 name: check
 
 on:
@@ -29,7 +30,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: bateri/pencere
-          ref: wt/pickpen
+          ref: bebc1d26134b8f8f2d74f60bffd6d9dec4d344ae
           path: pencere
       - name: Build pencere's runner and stand-in terminal
         working-directory: pencere

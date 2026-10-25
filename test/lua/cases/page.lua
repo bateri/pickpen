@@ -11,7 +11,7 @@ local api_feed = require("api.feed")
 local api_list = require("api.list")
 local api_panels = require("api.panels")
 
-local SOURCE = pencere.app.read("view/page.lua")
+local SOURCE = "view/page.lua"
 
 local PODS = table.concat({
 	"NAME      READY   STATUS             AGE",
@@ -397,4 +397,12 @@ t.test("the output panel follows the cursor", function()
 	host:key("down")
 	host:settle()
 	t.ok(page_host.says(host.tree, "web-1"), "the row Send would send now")
+end)
+
+t.test("the test host finds the scripts a page requires as the terminal does", function()
+	local resolve = page_host.resolve
+	t.eq(resolve("view/other.lua", "./page"), "view/page.lua")
+	t.eq(select(2, resolve("view/page.lua", "./nothing/here")), "nothing at view/nothing/here")
+	t.eq(select(2, resolve("view/page.lua", "parts/x")), "a path starts with ./ or ../")
+	t.eq(select(2, resolve("view/page.lua", "../../x")), "a path out of the bundle")
 end)

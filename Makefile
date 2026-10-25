@@ -34,7 +34,7 @@ test-lua:
 	cp -R src/program/. $(TESTDIR)-app/
 	rm -f $(TESTDIR)-app/app.lua
 	cp test/lua/*.lua $(TESTDIR)-app/
-	mkdir -p $(TESTDIR)-app/view && cp src/view/*.lua $(TESTDIR)-app/view/
+	mkdir -p $(TESTDIR)-app/view && cp -R src/view/. $(TESTDIR)-app/view/
 	for c in $(CASES); do cp test/lua/cases/$$c.lua $(TESTDIR)-app/cases/ || exit 1; done
 	"$(PENCERE)" build $(TESTDIR)-app --name test -o $(TESTDIR)-run
 	PENCERE_KIT="$(PENCERE_KIT)" ./$(TESTDIR)-run cases $(ONLY)

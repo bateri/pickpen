@@ -108,7 +108,6 @@ What a terminal's page cannot do yet, and what pickpen does instead:
   takes out the terms the mouse wrote); to clear the query press `/`, then `⌘A` and delete;
 - the keys Backspace, `F1`–`F12` and `⌃` with a letter (`⌃P` `⌃N`) do not reach a page, so the
   help is `?`, the panel is `⌘I`, and the palette's filter is deleted with `←`;
-- a page is one script that cannot `require` another, so the page is one file.
 
 ## Run it
 
