@@ -93,7 +93,8 @@ local S = {
 	palette = { filter = "", at = 1 },
 	toast = nil,
 	sending = false,
-	escape_asked = -100,
+	-- Esc has asked once whether to send nothing, and is waiting for the second.
+	esc_armed = false,
 	-- What the side panel shows.
 	detail = nil,
 	detail_due = nil,
@@ -112,9 +113,43 @@ local S = {
 	press_mods = {},
 }
 
+-- Things that happen a little later. An event carries no time, and the page's clock is the one of
+-- the last frame, which may be old: so a thing that is to happen in `seconds` is stamped by the
+-- next frame, and happens when a frame says that long has passed (the page asks for that frame).
+local timers = {}
+
+local function later(seconds, run)
+	timers[#timers + 1] = { ttl = seconds, run = run }
+end
+
 local function toast(words, bad)
-	S.toast = { words = words, bad = bad == true, over = S.now + (bad and 6 or 2.5) }
+	local mine = { words = words, bad = bad == true }
+	S.toast = mine
+	later(bad and 6 or 2.5, function()
+		if S.toast == mine then
+			S.toast = nil
+		end
+	end)
 	return true
+end
+
+-- Runs what is due at `now`, and says when the next thing is (nil: nothing is waiting).
+local function run_timers(now)
+	local wake = nil
+	local waiting = {}
+	for _, timer in ipairs(timers) do
+		if timer.at == nil then
+			timer.at = now
+		end
+		if now >= timer.at + timer.ttl then
+			timer.run()
+		else
+			waiting[#waiting + 1] = timer
+			wake = math.min(wake or timer.at + timer.ttl, timer.at + timer.ttl)
+		end
+	end
+	timers = waiting
+	return wake
 end
 
 local function shown()
@@ -1005,8 +1040,11 @@ local function back()
 		send_query()
 		return true
 	end
-	if S.sum.marked > 0 and S.now - S.escape_asked > 2.5 then
-		S.escape_asked = S.now
+	if S.sum.marked > 0 and not S.esc_armed then
+		S.esc_armed = true
+		later(2.5, function()
+			S.esc_armed = false
+		end)
 		return toast(string.format("Esc again to send nothing — %s marked would be dropped",
 			plural(S.sum.marked, "row", "rows")))
 	end
@@ -1021,6 +1059,15 @@ local function open_panel(tab)
 	end
 	S.detail_due, S.out_due, S.stats_for = S.now, S.now, nil
 	return true
+end
+
+-- ⇧⌘I: the panel opens on the next of its three, from the one it is on.
+local function next_panel()
+	local tabs = { row = "column", column = "output", output = "row" }
+	if not S.panel.open then
+		return open_panel(S.panel.tab)
+	end
+	return open_panel(tabs[S.panel.tab])
 end
 
 -- A column's order: up, then down, then the input's (or `clear`: the input's at once).
@@ -1081,9 +1128,9 @@ end
 -- Every command: the keyboard runs them, the palette lists them, and the help shows them, from this
 -- one list. A key is written `shift+mod+a`: ⌘ is `mod`.
 local COMMANDS = {
-	{ id = "down", title = "Next row", group = "Move", keys = { "down", "j" }, quiet = true,
+	{ id = "down", title = "Next row", group = "Move", keys = { "down" }, quiet = true,
 		run = function() return move(1) end },
-	{ id = "up", title = "Previous row", group = "Move", keys = { "up", "k" }, quiet = true,
+	{ id = "up", title = "Previous row", group = "Move", keys = { "up" }, quiet = true,
 		run = function() return move(-1) end },
 	{ id = "page-down", title = "A page down", group = "Move", keys = { "page_down" }, quiet = true,
 		run = function() return move(page_rows() - 1) end },
@@ -1134,13 +1181,14 @@ local COMMANDS = {
 			S.detail_due, S.out_due = S.now, S.now
 			return true
 		end },
+	{ id = "panel-next", title = "Next panel: the row, a column, what goes out", group = "Panels",
+		keys = { "shift+mod+i" }, run = next_panel },
 	{ id = "panel-row", title = "Panel: the row", group = "Panels", also = "preview",
-		keys = { "r" }, run = function() return open_panel("row") end },
+		run = function() return open_panel("row") end },
 	{ id = "panel-column", title = "Panel: a column's values", group = "Panels", also = "chart",
-		keys = { "c" }, run = function() return open_panel("column") end },
+		run = function() return open_panel("column") end },
 	{ id = "panel-output", title = "Panel: what goes out", group = "Panels",
-		also = "again command line", keys = { "o" },
-		run = function() return open_panel("output") end },
+		also = "again command line", run = function() return open_panel("output") end },
 
 	{ id = "copy-row", title = "Copy the row", group = "Copy", keys = { "mod+c" }, run = copy_row },
 }
@@ -1627,10 +1675,17 @@ local function click_row(kind, number, mods)
 		return reply(toggle(number))
 	end
 	local before = S.last_click
-	S.last_click = { number, S.now }
+	local mine = { number = number }
+	S.last_click = mine
+	later(0.4, function()
+		if S.last_click == mine then
+			S.last_click = nil
+		end
+	end)
 	S.cursor, S.follow, S.detail_due = number, false, S.now
-	if kind == "row" and before and before[1] == number and S.now - before[2] < 0.4
-		and S.sum.marked == 0 and not S.boot.confirm then
+	if kind == "row" and before and before.number == number and S.sum.marked == 0
+		and not S.boot.confirm then
+		S.last_click = nil
 		return reply(send())
 	end
 	return reply(true)
@@ -1827,9 +1882,7 @@ end
 local function render(size, now)
 	S.now = now
 	S.size = size
-	if S.toast and now >= S.toast.over then
-		S.toast = nil
-	end
+	local wake = run_timers(now)
 	if S.failure then
 		return div():size_full():p(20):bg("background"):color("foreground")
 			:child(text("pickpen cannot go on"):weight(700))
@@ -1839,20 +1892,16 @@ local function render(size, now)
 	if S.sum == nil or S.boot == nil then
 		return div():size_full():p(20):bg("background"):color("dim"):child(text("Starting…"))
 	end
-	local wake = nil
 	if S.query_due then
 		if now >= S.query_due then
 			send_query()
 		else
-			wake = S.query_due
+			wake = math.min(wake or S.query_due, S.query_due)
 		end
 	end
 	refresh_panel()
 	if S.detail_due and S.detail_due > now then
 		wake = math.min(wake or S.detail_due, S.detail_due)
-	end
-	if S.toast then
-		wake = math.min(wake or S.toast.over, S.toast.over)
 	end
 
 	local body = div():row():grow(1):min_h(0)

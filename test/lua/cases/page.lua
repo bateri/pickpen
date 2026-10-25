@@ -203,13 +203,10 @@ end)
 
 t.test("the column panel lists the values, and a click keeps the rows with one", function()
 	local host, session = open(PODS)
-	host:key("c")
+	click(host, "tab-column")
 	host:settle()
 	host:settle()
 	t.ok(page_host.says(host.tree, "filled"))
-	host:key("c")
-	host:key("c")
-	host:settle()
 	-- The panel opens on the first column; go to the status column.
 	click(host, "col-next")
 	click(host, "col-next")
@@ -237,7 +234,7 @@ t.test("the output panel shows what will go out and the command line again", fun
 	local host, session = open(PODS, { query = "" })
 	host:event({ type = "text", text = "web" })
 	host:key("a", { command = true })
-	host:key("o")
+	click(host, "tab-output")
 	host:settle()
 	host:settle()
 	t.ok(page_host.says(host.tree, "web-1"))
@@ -257,4 +254,69 @@ t.test("a long list is shown through a window of rows, not one element for each"
 	host:key("down", { command = true })
 	host:settle()
 	t.ok(page_host.says(host.tree, "row-50000"), "the last row after the jump")
+end)
+
+t.test("a second click on a row at once sends it; one a moment later does not", function()
+	local host, session = open(PODS)
+	click(host, "row:2")
+	click(host, "row:3")
+	t.eq(session.answer, nil, "two rows, two clicks")
+	click(host, "row:3")
+	host:settle()
+	t.eq(session.answer.ids, { 3 })
+
+	-- A second click after the first one's moment has passed is a click again.
+	local later, other = open(PODS)
+	click(later, "row:2")
+	later:render()
+	later.now += 5
+	later:render()
+	click(later, "row:2")
+	t.eq(other.answer, nil)
+	t.eq(later.session.answer, nil)
+end)
+
+t.test("a message to the person goes away by itself", function()
+	local host = open(PODS, { confirm = true })
+	host:key("enter")
+	t.ok(page_host.says(host:render(), "Mark the rows to send first"))
+	t.ok(host.wake ~= nil, "a frame is asked for when it is over")
+	host.now += 3
+	t.ok(not page_host.says(host:render(), "Mark the rows to send first"))
+	t.ok(host.wake == nil, "nothing more is waited for")
+end)
+
+t.test("Esc with rows marked asks, and asks again once its moment has passed", function()
+	local host, session = open(PODS)
+	host:key("tab")
+	host:key("escape")
+	host:render()
+	host.now += 4
+	host:render()
+	host:key("escape")
+	host:settle()
+	t.eq(session.answer, nil, "the moment passed: it asked again, and did not send nothing")
+end)
+
+t.test("the rows the program has too many of are not asked for twice", function()
+	local lines = { "ID  NAME" }
+	for index = 1, 3000 do
+		lines[#lines + 1] = string.format("%-6d row-%d", index, index)
+	end
+	local host = open(table.concat(lines, "\n") .. "\n")
+	local asked = 0
+	for _, text in ipairs(host.sent) do
+		if string.find(text, '"method":"window"', 1, true) then
+			asked += 1
+		end
+	end
+	host:render()
+	host:render()
+	local after = 0
+	for _, text in ipairs(host.sent) do
+		if string.find(text, '"method":"window"', 1, true) then
+			after += 1
+		end
+	end
+	t.eq(after, asked, "a render that finds the rows in hand asks for none")
 end)

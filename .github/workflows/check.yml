@@ -1,5 +1,8 @@
-# The gate on every push to main and every pull request: `make check`, on Linux and macOS,
-# the two systems pickpen runs on.
+# The gate on every push to main and every pull request: `make check`, on Linux and macOS, the two
+# systems pickpen runs on. pickpen is one file made by pencere's Lua runner, and until pencere has
+# a release the runner is built here from the branch of pencere that has what pickpen needs of it
+# (`io.read_stdin`, `io.is_terminal`, `serve{ filter = true }`, `close_view`, `session = true`). When
+# pencere has a release with them, this fetches the runner instead and the build goes away.
 name: check
 
 on:
@@ -10,6 +13,9 @@ on:
 permissions:
   contents: read
 
+env:
+  CARGO_TERM_COLOR: never
+
 jobs:
   check:
     strategy:
@@ -19,9 +25,20 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: pencere, with the runner and the stand-in terminal built
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: make check
+          repository: bateri/pencere
+          ref: wt/pickpen
+          path: pencere
+      - name: Build pencere's runner and stand-in terminal
+        working-directory: pencere
+        run: |
+          cargo build --release -p pencere-cli
+          cargo build -p pencere-fake-host
+      - name: make check
+        run: |
+          make check \
+            PENCERE="$PWD/pencere/target/release/pencere" \
+            FAKE_HOST="$PWD/pencere/target/debug/pencere-fake-host" \
+            PENCERE_KIT="$PWD/pencere/kit/luau/prelude"

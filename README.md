@@ -9,13 +9,12 @@ on your machine or on a server over plain `ssh`.
 kubectl get pods | pickpen --where 'STATUS!=Running' --confirm --field NAME | xargs kubectl delete pod
 ```
 
-![pickpen: the pods that are not running, marked by --where, one unmarked by hand, and what will go out](docs/confirm.png)
-
-pickpen is a [pencere](https://github.com/bateri/pencere) program. In a terminal that hosts
-pencere views ([bateri](https://github.com/bateri/bateri)) the pane becomes the interface for as
-long as you choose, the way `vim` takes the screen and gives it back. The pipeline's data never
-touches the terminal: pickpen talks to the terminal on the terminal itself, and keeps stdin and
-stdout for the rows.
+pickpen is a [pencere](https://github.com/bateri/pencere) program, written in Lua and made one
+native file by pencere's runner. In a terminal that hosts pencere views
+([bateri](https://github.com/bateri/bateri)) the pane becomes the interface for as long as you
+choose, the way `vim` takes the screen and gives it back. The pipeline's data never touches the
+terminal: pickpen talks to the terminal on the terminal itself, and keeps stdin and stdout for the
+rows.
 
 ## What it does
 
@@ -24,11 +23,11 @@ the one array of objects an answer holds, as `kubectl get -o json` and most APIs
 tables commands line up with spaces — `ps aux`, `docker ps`, `kubectl get`, `df -h` — cut into
 their columns as they line them up, `Up 2 hours` and `/usr/bin/foo --bar` staying one cell
 each. The shape is read from the first lines; `--input` says it when it would be read wrong.
-Rows show as they arrive, so `tail -f app.log | pickpen` works.
+Rows show as they arrive, so `tail -f app.log | pickpen` works, and a list of hundreds of thousands
+of rows stays responsive: the program holds the rows and the page shows the few in sight.
 
-**Typing filters.** What you type always goes to the query, so there is nothing to press before
-you search. Words are looked for in every column; a column can be compared by its heading, and
-quantities are compared as quantities:
+**Typing filters.** What you type goes to the query. Words are looked for in every column; a column
+can be compared by its heading, and quantities are compared as quantities:
 
 | you type                  | the rows kept                                            |
 | ------------------------- | -------------------------------------------------------- |
@@ -40,13 +39,13 @@ quantities are compared as quantities:
 | `started>2026-10-01`      | dates and times compare as moments                       |
 
 A column is named as its heading is, or by its letters alone (`cpu` for `%CPU`). Under the query,
-each term says how it was read — `STATUS is not Running`, `has web` — and a click takes it out. A
-name that is no column's is looked for as a word, and the view says so.
+each term says how it was read — `STATUS is not Running`, `has web` — and a name that is no
+column's is looked for as a word, and the page says so.
 
 **The mouse writes the query too.** Right-click a cell for _only rows where STATUS is
-CrashLoopBackOff_; click a value in a column's panel, ⌘-click another to keep either; drag across
-the chart of a column's numbers to keep a range. Each of these writes its term into the query,
-where you can read it, change it, and take it with you.
+CrashLoopBackOff_; click a value in a column's panel, ⌘-click another to leave its rows out; drag
+across the chart of a column's numbers to keep a range. Each of these is a term beside what you
+typed, shown with an ✕ that takes it out, and part of the command line the output panel shows.
 
 **What goes out is shown before it goes.** The output panel has the exact bytes Send will write,
 drawn by the program with the same function that writes them. By default a row goes out as it
@@ -54,7 +53,7 @@ came in — a line as its line, a table's row without the heading (so `xargs` ge
 after its heading, JSON lines as lines, a JSON document as an array of the elements chosen.
 `--field NAME,PID` writes columns tab-separated (`--field 1` is the first word of a line, as in
 awk), `--format 'kill {PID}'` fills a template, `--output json` converts. Right-click a heading
-to send only that column.
+to send only that column, or pick the columns in the output panel.
 
 **And how to do it again, with nobody to ask.** The same panel shows the command line that
 chooses the same rows in a script or in cron — the query as `--where`, the order as `--sort`, the
@@ -72,50 +71,56 @@ for you.
 pickpen runs on, with `{}`, `{COLUMN}` and `{2}` quoted for the shell, in a session of its own
 with no terminal and no stdin, and shows what it prints, colours and all.
 
-|                                                                     |                                                         |
-| ------------------------------------------------------------------- | ------------------------------------------------------- |
-| ![A column's chart, dragged across to keep a range](docs/chart.png) | ![The preview of a file](docs/preview.png)              |
-| ![The palette](docs/palette.png)                                    | ![An 80×24 pane in a light theme](docs/light-80x24.png) |
-
 ## The keyboard, and the mouse
 
-Typing always goes to the query; the commands are on keys that do not type. Everything the keys
-do the mouse does too, the bottom line has the keys that matter most (each one a button), and
-`F1` lists them all.
+The page has the keyboard in two places. It starts in the terminal's own text field: **what you type
+is the query**. ⏎, ↓, ⇥ and Esc leave the field for the rows (the field keeps them, so the first
+press of one only leaves), and `/` takes you back to it. Everything the keys do the mouse does too,
+the bottom line has the keys that matter most (each one a button), and `?` lists them all.
 
-|                      |                                                                                                      |
-| -------------------- | ---------------------------------------------------------------------------------------------------- |
-| `↑` `↓` / `⌃P` `⌃N`  | move; `PgUp` `PgDn` a page, `⌘↑` `⌘↓` the first and the last row                                     |
-| `Tab` `⇧Tab`         | mark the row and go on (space types a space)                                                         |
-| `⇧↑` `⇧↓`            | mark a run of rows                                                                                   |
-| `⌘A`, `⇧⌘A`          | mark every row shown, unmark every row                                                               |
-| `⏎`                  | send: the marked rows, or the row under the cursor                                                   |
-| `Esc`                | back: close what is open, then clear the query, then send nothing (asked twice when rows are marked) |
-| `⌃1`–`⌃9`, `⌃0`      | order by that column (again for the other way), the input's order                                    |
-| `⌘K`                 | every command, a column's own among them                                                             |
-| `⌘I`, `F2` `F3` `F4` | the side panel: the row, a column, what goes out                                                     |
-| `⌘C`                 | copy the row                                                                                         |
-| `⌃C`                 | quit, sending nothing                                                                                |
+|                   |                                                                                   |
+| ----------------- | --------------------------------------------------------------------------------- |
+| `↑` `↓`           | move; `PgUp` `PgDn` a page, `⌘↑` `⌘↓` the first and the last row                  |
+| `⇥` `⇧⇥` `Space`  | mark the row and go on (the next, the previous)                                   |
+| `⇧↑` `⇧↓`         | mark a run of rows                                                                |
+| `⌘A`, `⇧⌘A`       | mark every row shown, unmark every row                                            |
+| `⏎`               | send: the marked rows, or the row under the cursor                                |
+| `Esc`             | back: close what is open, then the terms the mouse wrote, then send nothing       |
+| `⌃1`–`⌃9`, `⌃0`   | order by that column (again for the other way), the input's order                 |
+| `⌘K`              | every command, a column's own among them                                          |
+| `⌘I`, `⇧⌘I`       | the side panel: show or hide it, and its next page (the row, a column, what goes out) |
+| `⌘C`              | copy the row                                                                      |
+| `/`, `?`          | take the keyboard back to the query, list the keys                                |
+| `⌃C`              | quit, sending nothing                                                             |
 
-The box in front of a row marks it, and a drag down the boxes marks every row it passes;
-⌘-click marks one row and ⇧-click a run; a double-click sends the row when nothing is marked
-(never with `--confirm`); a click on a heading orders by it, and its edge resizes it. No click
-takes the keyboard from the query.
+Esc asks twice when rows are marked. The box in front of a row marks it, and a drag down the boxes
+marks every row it passes; ⌘-click marks one row and ⇧-click a run; a double-click sends the row
+when nothing is marked (never with `--confirm`); a click on a heading orders by it, and its edge
+resizes it.
 
-The keys a terminal keeps for itself never reach a view — in bateri `⌘P`, `⌘W`, `⌘O`, `⌘T`,
+What the terminal keeps for itself never reaches a view — in bateri `⌘P`, `⌘W`, `⌘O`, `⌘T`,
 `⌘N`, `⌘D` and `⌘1`–`⌘9` — and no command is on `⌥` and a letter, which is how a Mac types
 `@`, `#`, `[` or `{` on many layouts. On Linux and Windows, `⌘` is `Ctrl`.
 
+What a terminal's page cannot do yet, and what pickpen does instead:
+
+- the page cannot write the terminal's text field, so **Esc does not clear what you typed** (it
+  takes out the terms the mouse wrote); to clear the query press `/`, then `⌘A` and delete;
+- the keys Backspace, `F1`–`F12` and `⌃` with a letter (`⌃P` `⌃N`) do not reach a page, so the
+  help is `?`, the panel is `⌘I`, and the palette's filter is deleted with `←`;
+- a page is one script that cannot `require` another, so the page is one file.
+
 ## Run it
 
-It needs Node 22 where it runs.
+pickpen is one file with no dependencies: take the one for your machine from the
+[releases](https://github.com/bateri/pickpen/releases) (macOS on Apple silicon, and Linux on `arm64`
+and `x86_64`), check it against `SHA256SUMS`, make it executable and put it on your `PATH`.
 
 To choose in a view you need a terminal that hosts pencere views. bateri is the first, and no
 release of it has them yet: until one does, build bateri from its `main` branch. `--where`
 without `--confirm` needs no terminal at all.
 
 ```sh
-npm install -g pickpen
 ps aux | pickpen --field PID | xargs kill
 git log --oneline | pickpen --preview 'git show --color {1}' --field 1 | xargs git cherry-pick
 pickpen --where 'level=error' --output json < app.jsonl > errors.json
@@ -140,50 +145,46 @@ pods=$(kubectl get pods | pickpen --confirm --where 'STATUS!=Running' --field NA
 
 **Over ssh.** Install it on the server and run it there, in a pane of a terminal that hosts
 pencere: nothing listens on a port, the interface travels in the terminal's own stream, and it
-runs on your machine in a sandbox that reaches nothing but its program. Its files cross the
-stream once (about 300 kB); after that the terminal keeps them.
+runs on your machine in a sandbox that reaches nothing but its program. Its page crosses the
+stream once (about 60 kB); after that the terminal keeps it.
 
 pickpen is never an MCP server on stdio: its stdin and stdout are the pipeline's, and it does not
 guess whether it is in one (pencere §13).
 
 ## How it works
 
-- `src/server/input.ts` reads the input as it comes, telling its shape from the first lines, and
+[`src/program/README.md`](src/program/README.md) has the program's modules and the calls its page
+makes. In short:
+
+- `src/program/input/` reads the input as it comes, telling its shape from the first lines, and
   keeps each record's own text, which is what goes out when the output has the input's shape.
-- `src/shared/query.ts` is the query, and the order; the view filters with it and `--where` runs
-  it, so the command line the view shows chooses what the view showed. A test runs `--where` and
-  a view sending the rows the query matches, in a pane, and compares the bytes.
-- `src/server/output.ts` writes what goes out; the view's picture of it is drawn by the same
-  function.
-- `src/server/main.ts` is the one place that knows about the terminal: `serve` from
-  `@pencere/sdk`, with `filter`, opens the view on the terminal itself while stdin and stdout
-  carry the rows; a `ViewControl` closes it once the person has answered.
-- `src/view` is the interface: React and [Tabler icons](https://tabler.io/icons), talking MCP
-  Apps' messages to its host. It draws only the rows in sight, and asks the program for more as
-  they come.
+- `src/program/query/` is the query, the order and what a column holds; the page filters with it
+  and `--where` runs it, so the command line the page shows chooses what the page showed. A test
+  runs `--where` and a page sending the rows the query matches, in a pane, and compares the bytes.
+- `src/program/output/` writes what goes out; the page's picture of it is drawn by the same function.
+- `src/program/state/` is the table and the list a person looks at; `src/program/api/` is the one
+  place that knows the page: its calls, and the topic it listens to.
+- `src/program/app.lua` is the command line, and the one place that knows about the terminal:
+  `serve{ filter = true }` shows the page on the terminal itself while stdin and stdout carry the
+  rows, and `close_view` ends it once the person has answered.
+- `src/view/page.lua` is the interface: a page of pencere's kit, in the terminal's own colours and
+  font. It draws only the rows in sight and asks the program for more as it scrolls.
 
 ## Work on it
 
 ```sh
 git clone https://github.com/bateri/pickpen && cd pickpen
-npm install
-make check          # types, build, formatting, and the tests: the shapes, the query, the
-                    # output, the server, the program with nobody to ask, and pickpen in a
-                    # pipeline under pencere-fake-host when a pencere checkout is beside this one
-make harness        # http://localhost:5199 — the view in a stand-in host, on an input of demo/
+make check          # format, the Lua tests (the modules and the page), the program built, and the
+                    # built file in a pipeline under pencere-fake-host
 ```
 
-How a version is released is in [RELEASING.md](RELEASING.md), and what each one changed in
-[CHANGELOG.md](CHANGELOG.md).
+`make check` needs a [pencere](https://github.com/bateri/pencere) checkout beside this one (or
+`PENCERE=`, `FAKE_HOST=` and `PENCERE_KIT=` naming what it builds there): `cargo build --release -p
+pencere-cli` and `cargo build -p pencere-fake-host`. There is no Node anywhere in it.
 
-The harness plays the terminal in a browser: it frames the view with hot reload, sends it the
-colours of a terminal theme (bateri's, Tokyo Night, Gruvbox, Dracula, Solarized and more) and the
-size of a pane (80×24 up), and runs pickpen's own server on an input of `demo/` — made-up pods,
-processes, an access log, servers and commits, written by `make demo` the same every time — with
-the command line you give it. `drip` lets the input come a line at a time. When the view sends,
-the harness shows what would have gone to stdout. In its address, `input=`, `args=`, `theme=` and
-`size=` choose, `bare` shows the pane alone, and `built` shows the view `npm run build` wrote;
-`node tools/shot.mjs` takes the screenshots in `docs/` from it.
+How a version is released is in [RELEASING.md](RELEASING.md), and what each one changed in
+[CHANGELOG.md](CHANGELOG.md). `demo/` has made-up pods, processes, an access log, servers and
+commits to try it on: `pickpen demo/pods.txt`.
 
 ## License
 
