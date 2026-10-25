@@ -42,8 +42,8 @@ change what the previous one did.
 - The query is typed in the terminal's own text field. The field gives ⏎, ↓, ⇥ and Esc back to the
   page, so the first press of one only leaves it for the rows, and `/` returns to it. The page
   cannot change the field's text, so Esc takes out the terms the mouse wrote, and no longer clears
-  what was typed. The terms a click or a drag writes are shown beside what was typed, each with an
-  ✕, and are part of the `--where` the output panel shows.
+  what was typed. The terms a click or a drag writes are shown beside what was typed, each with a
+  Remove, and are part of the `--where` the output panel shows.
 - Backspace, `F1`–`F12` and `⌃` with a letter do not reach a page: help is `?` (it was `F1`), the
   side panel is `⌘I` and `⇧⌘I` (it was `F2`–`F4`), the palette's filter is deleted with `←`, and
   `⌃P` `⌃N` are gone.

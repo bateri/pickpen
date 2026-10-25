@@ -506,3 +506,9 @@ t.test("a hundred thousand rows are written in good time, in each shape", functi
 	timed("convert json", rows, csv, convert("json"))
 	timed("lines word", rows, { format = "lines", names = { "line" } }, fields("2"))
 end)
+
+t.test("a command line joins a value that starts with a dash to its flag", function()
+	local line = output.command_line({ where = "-1 foo", format = "-{PID}", sort = nil })
+	t.eq(line, "pickpen --where='-1 foo' --format='-{PID}'")
+	t.eq(output.command_line({ where = "web" }), "pickpen --where web")
+end)

@@ -23,14 +23,22 @@ function M.command_line(recipe)
 	if recipe.input and recipe.input ~= "" then
 		add("--input", quote(recipe.input))
 	end
-	add("--where", quote(space.trim(recipe.where or "")))
+	-- A value that starts with a dash is joined to its flag, or it would be read as a flag.
+	local function value_of(flag, value)
+		if string.sub(value, 1, 1) == "-" then
+			words[#words + 1] = flag .. "=" .. quote(value)
+		else
+			add(flag, quote(value))
+		end
+	end
+	value_of("--where", space.trim(recipe.where or ""))
 	if recipe.sort then
 		add("--sort", quote((recipe.sort.descending and "-" or "") .. recipe.sort.column))
 	end
 	if recipe.field and #recipe.field > 0 then
-		add("--field", quote(table.concat(recipe.field, ",")))
+		value_of("--field", table.concat(recipe.field, ","))
 	elseif recipe.format and recipe.format ~= "" then
-		add("--format", quote(recipe.format))
+		value_of("--format", recipe.format)
 	elseif recipe.output and recipe.output ~= "" then
 		add("--output", quote(recipe.output))
 	end

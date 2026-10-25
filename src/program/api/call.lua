@@ -6,6 +6,7 @@
 --
 -- This is api/'s: the files of api/ know the page, and input/, query/, output/ and state/ do not.
 
+local pencere = require("pencere")
 local params = require("api.params")
 
 local M = {}
@@ -17,6 +18,35 @@ local function failure(err)
 	end
 	local words = string.gsub(tostring(err), "\nstack traceback:.*$", "")
 	return { code = "failed", message = words }
+end
+
+-- What the page is told is JSON, which is text: a cell or a heading with a byte that is not UTF-8
+-- is told with U+FFFD in its place. (What goes out on stdout is not touched; this is the page's
+-- picture.) A table with such a string in it is copied, since the answer shares the program's own
+-- tables.
+local function clean(value)
+	if type(value) == "string" then
+		if utf8.len(value) == nil then
+			return pencere.text.lossy(value)
+		end
+		return value
+	elseif type(value) ~= "table" then
+		return value
+	end
+	local copy = nil
+	for key, item in pairs(value) do
+		local cleaned = clean(item)
+		if cleaned ~= item then
+			if copy == nil then
+				copy = {}
+				for k, v in pairs(value) do
+					copy[k] = v
+				end
+			end
+			copy[key] = cleaned
+		end
+	end
+	return copy or value
 end
 
 -- A call that takes the params `schema` describes. `work(params, call)` gives the answer; `call`
@@ -31,7 +61,7 @@ function M.new(schema, work)
 		if not results[1] then
 			error(failure(results[2]), 0)
 		end
-		return table.unpack(results, 2, results.n)
+		return clean(results[2])
 	end
 end
 

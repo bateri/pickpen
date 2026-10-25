@@ -163,19 +163,22 @@ end
 -- ---- 3. what is asked of the program ----------------------------------------------------------
 
 local send_query
+local resync
 local reset_list
 local take_summary
+local reveal
 
 -- Asks, and takes the answer: `done(result)` gives the reply (true when the page changed). An error
 -- is said in words; `stale` (a place in a list that is gone) asks for the list again.
 local function ask(method, params, done)
 	return b.call(method, params, function(result, err)
 		if err then
-			if err.code == "stale" then
-				send_query()
-				return false
-			end
+			-- Whatever was being sent is not; the person has the page back.
 			S.sending = false
+			if err.code == "stale" then
+				resync()
+				return toast("The list changed under that; it was not done.", true)
+			end
 			return toast(err.message or err.code or "it failed", true)
 		end
 		if done then
@@ -202,16 +205,20 @@ function take_summary(sum, fresh)
 	S.sum = sum
 	if old == nil or sum.gen ~= old.gen then
 		reset_list(fresh or old == nil)
+		S.detail_due, S.out_due = S.now, S.now
 	elseif sum.shown > old.shown then
 		if S.follow then
 			S.cursor = sum.shown
+			S.detail_due, S.out_due = S.now, S.now
+			reveal()
 		else
 			S.unseen += sum.shown - old.shown
 		end
 	end
+	if old ~= nil and sum.marked ~= old.marked then
+		S.out_due = S.now
+	end
 	S.cursor = clamp(S.cursor, 1, math.max(sum.shown, 1))
-	S.detail_due = S.now
-	S.out_due = S.now
 end
 
 local function chip_sources()
@@ -231,6 +238,20 @@ function send_query()
 			return false
 		end
 		take_summary(result.summary, true)
+		return true
+	end)
+end
+
+-- The list is asked for again with the query as it is, and the cursor stays where it was: what a
+-- refusal because the list had changed asks for.
+function resync()
+	S.query_seq += 1
+	local seq = S.query_seq
+	ask("query", { typed = S.typed, chips = chip_sources() }, function(result)
+		if result.superseded or seq ~= S.query_seq then
+			return false
+		end
+		take_summary(result.summary, false)
 		return true
 	end)
 end
@@ -312,7 +333,7 @@ local function page_rows()
 end
 
 -- Scrolls the least that shows the cursor's row.
-local function reveal()
+function reveal()
 	local offset = ui:scroll_offset(LIST)
 	local view = list_height()
 	local top, bottom = (S.cursor - 1) * ROW, S.cursor * ROW
@@ -330,6 +351,7 @@ local function move_to(place)
 	S.cursor = clamp(place, 1, shown())
 	S.follow = false
 	S.detail_due = S.now + 0.1
+	S.out_due = S.now
 	reveal()
 	return true
 end
@@ -664,9 +686,9 @@ local function column_panel()
 	end
 	S.column = clamp(S.column, 1, #list)
 	body:child(div():row():items_center():gap(6):no_shrink()
-		:child(button("col-prev", "‹", nil))
+		:child(button("col-prev", "Previous", "‹"))
 		:child(div():grow(1):min_w(0):child(text(list[S.column]):weight(650):truncate()))
-		:child(button("col-next", "›", nil)))
+		:child(button("col-next", "Next", "›")))
 	local st = S.stats
 	if st == nil or st.column ~= S.column then
 		return body:child(text("…"):color("dim"):mt(8))
@@ -718,6 +740,10 @@ local function field_chips(body)
 				:color(on and "background" or "foreground")))
 	end
 	body:child(wrap)
+	if S.fields ~= nil and #S.fields == 0 then
+		body:child(text("None is ticked: Send writes what the command line says.")
+			:text_size(SMALL):color("dim"):mt(4))
+	end
 	if S.fields ~= nil then
 		body:child(div():row():mt(6):no_shrink()
 			:child(button("fields-reset", "Use the command line's columns", nil)))
@@ -903,8 +929,8 @@ local function chips_row()
 			:bg("raised2"):child(text(term.label):text_size(SMALL))
 		if term.chip then
 			local id = "chip:" .. index
-			chip:child(div():press(id):px(3):rounded(8):bg(ui.hover == id and "raised4" or nil)
-				:child(text("✕"):text_size(SMALL):color("dim")))
+			chip:child(div():press(id):px(6):rounded(8):bg(ui.hover == id and "raised4" or nil)
+				:child(text("Remove"):text_size(SMALL):color("dim")))
 		else
 			chip:child(text("typed"):text_size(10):color("quiet"))
 		end
@@ -979,7 +1005,7 @@ local function footer()
 		:child(button("mark-all", "Mark all", "⌘A"))
 		:child(button("unmark", "Unmark all", "⇧⌘A"))
 		:child(button("palette", "Commands", "⌘K"))
-		:child(button("help", "Keys", "?"))
+		:child(button("help", "Show keys", "?"))
 		:child(div():grow(1))
 		:child(button("cancel", "Send nothing", "Esc"))
 end
@@ -1684,7 +1710,7 @@ local function click_row(kind, number, mods)
 			S.last_click = nil
 		end
 	end)
-	S.cursor, S.follow, S.detail_due = number, false, S.now
+	S.cursor, S.follow, S.detail_due, S.out_due = number, false, S.now, S.now
 	if kind == "row" and before and before.number == number and S.sum.marked == 0
 		and not S.boot.confirm then
 		S.last_click = nil
@@ -1981,9 +2007,14 @@ b.call("open", {}, function(result, err)
 		return true
 	end
 	S.boot = result
-	S.typed = result.query or ""
 	S.typing = true
 	take_summary(result.summary, true)
+	-- The query the command line started with cannot be put in the terminal's field, so it stands
+	-- as a term the mouse wrote would: in view, and with a Remove.
+	if result.query and result.query ~= "" then
+		S.chips = { { column = 0, source = result.query } }
+		send_query()
+	end
 	if result.notice then
 		toast(result.notice, true)
 	end

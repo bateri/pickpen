@@ -331,18 +331,22 @@ local function open_input(options, on_data, on_end)
 		local why = ok and "no such file" or tostring(stat)
 		quit(66, "cannot read " .. options.file .. ": " .. why)
 	end
-	if stat.kind ~= "file" then
-		quit(66, "cannot read " .. options.file .. ": it is not a file")
+	if stat.kind == "dir" then
+		quit(66, "cannot read " .. options.file .. ": it is a directory")
 	end
 	local failed, over = false, false
 	local child = pencere.process.spawn({
-		argv = { "cat", options.file },
+		argv = { "cat", "--", options.file },
 		raw = true,
 		on_stdout = on_data,
 		on_stderr = function()
 			failed = true
 		end,
 		on_exit = function(code)
+			-- Stopped (the list is full, or the program is going): nothing more is wanted of it.
+			if over then
+				return
+			end
 			if failed or code ~= 0 then
 				quit(66, "cannot read " .. options.file)
 			end

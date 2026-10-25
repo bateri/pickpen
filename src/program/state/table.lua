@@ -94,12 +94,17 @@ function Table:add(record)
 	local cells = record.cells
 	for column, cell in ipairs(cells) do
 		if #cell > M.MAX_CELL then
-			-- Cut at a character boundary, so that the rest is still text.
-			local cut = string.sub(cell, 1, M.MAX_CELL)
-			while #cut > 0 and utf8_len(cut) == nil do
-				cut = string.sub(cut, 1, #cut - 1)
+			-- Cut at a character boundary, so that the rest is still text: not inside a character
+			-- (a byte of the form 10xxxxxx continues one), which takes at most three bytes back.
+			local at = M.MAX_CELL
+			for _ = 1, 3 do
+				local next_byte = string.byte(cell, at + 1)
+				if next_byte == nil or next_byte < 0x80 or next_byte >= 0xC0 then
+					break
+				end
+				at -= 1
 			end
-			cells[column] = cut
+			cells[column] = string.sub(cell, 1, at)
 			self.cut = true
 		end
 	end

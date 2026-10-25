@@ -6,7 +6,7 @@ page does instead. Each is a thing the kit or the terminal could give; none is a
 
 | gap | what pickpen does instead |
 | --- | --- |
-| A page cannot write the text of the terminal's field, or clear it | the query is the field's text plus terms the mouse wrote, shown beside it as chips with an ✕; Esc takes out the chips and not the typed text |
+| A page cannot write the text of the terminal's field, or clear it | the query is the field's text plus terms the mouse wrote, shown beside it as chips with a Remove; Esc takes out the chips and not the typed text |
 | The field keeps ⏎ ↓ ⇥ Esc and tells the page nothing; the page cannot ask where the keyboard is | the page takes the first key it is given for the keyboard having come to it, and draws no focus it cannot know; `/` hands the keyboard back |
 | One text field a page (the first element that says it is one) | the palette's filter is typed as keys (a character is a key event) and deleted with ← |
 | No Backspace/Delete, no `F1`–`F12`, no `⌃` with a letter in the keys a page is given | help is `?`, the side panel `⌘I`, ordering `⌃1`–`⌃9`; every command is also in the palette |

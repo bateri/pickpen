@@ -226,3 +226,33 @@ t.test("the topic says the summary at once", function()
 	t.eq(#pushed, 1, "the summary at once")
 	t.eq(pushed[1].total, 3)
 end)
+
+t.test("a cell is cut at a character, and a row of a few characters is shown whole", function()
+	local cells = string.rep("é", 200)
+	local _, calls = start("ID,TEXT\n1," .. cells .. "\n", { input = "csv" })
+	t.eq(calls.window({ from = 1, count = 1 }).rows[1].cells[2], cells)
+end)
+
+t.test("a cell with a byte that is not text is told with U+FFFD, and goes out as it is", function()
+	local session, calls = start("ID,TEXT\n1,bad\255byte\n", { input = "csv" })
+	local window = calls.window({ from = 1, count = 1 })
+	local text = window.rows[1].cells[2]
+	t.eq(text, "bad\u{fffd}byte")
+	-- The answer can be sent as JSON, which the cell itself could not.
+	t.ok(#require("pencere").json.encode(window) > 0)
+	t.eq(calls.row({ pos = 1 }).cells[2], "bad\u{fffd}byte")
+	t.eq(session.table.rows[1].cells[2], "bad\255byte", "what is held is not changed")
+	calls.mark({ op = "all", on = true })
+	t.eq(calls.choose({}).chosen, 1)
+	t.eq(session.answer.ids, { 1 })
+end)
+
+t.test("a cell over the limit is cut at a character, in linear time", function()
+	local cell = string.rep("a", 16380) .. "éééééé"
+	local text = "ID,TEXT\n1," .. cell .. "\n2," .. string.rep("b", 20000) .. "\255\n"
+	local session = start(text, { input = "csv" })
+	t.eq(#session.table.rows[1].cells[2], 16380 + 2 * 2, "not inside a character")
+	t.ok(utf8.len(session.table.rows[1].cells[2]) ~= nil)
+	t.eq(#session.table.rows[2].cells[2], 16384, "a stray byte does not take the rest with it")
+	t.eq(session.table.cut, true)
+end)

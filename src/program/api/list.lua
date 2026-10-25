@@ -30,6 +30,10 @@ local function short(cell)
 		return cell
 	end
 	local ok, cut = pcall(utf8.offset, cell, LONGEST_CELL + 1)
+	if ok and cut == nil then
+		-- Fewer characters than that: all of it.
+		return cell
+	end
 	return string.sub(cell, 1, (ok and cut or LONGEST_CELL + 1) - 1)
 end
 

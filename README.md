@@ -45,7 +45,7 @@ column's is looked for as a word, and the page says so.
 **The mouse writes the query too.** Right-click a cell for _only rows where STATUS is
 CrashLoopBackOff_; click a value in a column's panel, ⌘-click another to leave its rows out; drag
 across the chart of a column's numbers to keep a range. Each of these is a term beside what you
-typed, shown with an ✕ that takes it out, and part of the command line the output panel shows.
+typed, shown with a Remove that takes it out, and part of the command line the output panel shows.
 
 **What goes out is shown before it goes.** The output panel has the exact bytes Send will write,
 drawn by the program with the same function that writes them. By default a row goes out as it

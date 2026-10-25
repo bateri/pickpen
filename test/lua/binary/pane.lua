@@ -189,9 +189,9 @@ t.test("rows that come while the view is open join the list", function()
 	t.ok(has(ran.log, "view:"), ran.log)
 end)
 
-t.test("a list of 200,000 rows is held by the program and shown a window at a time", function()
+t.test("a list of 210,000 rows is held, to the limit, and shown a window at a time", function()
 	local lines = { string.format("%-8s %7s %5s %s", "USER", "PID", "%CPU", "COMMAND") }
-	for number = 1, 200000 do
+	for number = 1, 210000 do
 		lines[#lines + 1] = string.format("%-8s %7d %5.1f /usr/bin/program-%d --flag",
 			"user" .. number % 7, number, number % 100 + (number % 10) / 10, number)
 	end
@@ -212,6 +212,7 @@ t.test("a list of 200,000 rows is held by the program and shown a window at a ti
 	s.clean(dir)
 	t.eq(ran.status, 0, ran.err)
 	t.ok(has(ran.log, '"total":200000'), "the summary says how many rows there are")
+	t.ok(has(ran.log, '"capped":true'), "and that it stopped there")
 	t.ok(has(ran.log, "program-199999"), "the last rows were asked for and given")
 	print(string.format("       200,000 rows: opened, windowed, queried, marked, sent in %.1f s",
 		ran.seconds))

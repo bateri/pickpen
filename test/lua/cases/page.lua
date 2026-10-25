@@ -320,3 +320,81 @@ t.test("the rows the program has too many of are not asked for twice", function(
 	end
 	t.eq(after, asked, "a render that finds the rows in hand asks for none")
 end)
+
+local function calls_of(host, method)
+	local n = 0
+	for _, text in ipairs(host.sent) do
+		if string.find(text, '"method":"' .. method .. '"', 1, true) then
+			n += 1
+		end
+	end
+	return n
+end
+
+t.test("a refusal because the list changed gives the page back to the person", function()
+	local host, session = open(PODS)
+	session.view:refilter()
+	host:key("enter")
+	host:settle()
+	t.eq(session.answer, nil, "the list had changed: nothing was sent")
+	t.ok(page_host.says(host.tree, "The list changed"))
+	host:key("enter")
+	host:settle()
+	t.eq(session.answer.kind, "chosen", "and the page is the person's again")
+end)
+
+t.test("the query the command line started with stands as a term that can be taken out", function()
+	local host, session = open(PODS, { query = "web" })
+	t.eq(session.view.typed, "")
+	t.eq(session.view.chips, { "web" })
+	t.eq(#session.view.shown, 2)
+	t.ok(page_host.says(host.tree, "Remove"))
+	click(host, "chip:1")
+	t.eq(#session.view.shown, 4)
+end)
+
+t.test("following the last row scrolls to it as rows come", function()
+	local lines = { "ID  NAME" }
+	for index = 1, 60 do
+		lines[#lines + 1] = string.format("%-6d row-%d", index, index)
+	end
+	local host, session = open(table.concat(lines, "\n") .. "\n")
+	host.boxes.list = { x = 0, y = 100, w = 800, h = 240, content = 60 * 24 }
+	host:key("down", { command = true })
+	host:settle()
+	local listing = page_host.find(host.tree, function(node)
+		return node.meta and node.meta.id == "list"
+	end)
+	t.eq(listing.style.scroll_y, 60 * 24 - 240, "the last row is the last in sight")
+	session:feed(string.rep("0     later\n", 30))
+	host.boxes.list.content = 90 * 24
+	host:push_now(require("api.summary").of(session))
+	host:settle()
+	listing = page_host.find(host.tree, function(node)
+		return node.meta and node.meta.id == "list"
+	end)
+	t.eq(listing.style.scroll_y, 90 * 24 - 240, "and goes on to the new last row")
+end)
+
+t.test("rows that come do not ask for the row again, unless they move the cursor", function()
+	local host, session = open(PODS)
+	click(host, "tab-row")
+	host:settle()
+	local before = calls_of(host, "row")
+	for _ = 1, 3 do
+		session:feed("db-9     1/1     Running            1d\n")
+		host:push_now(require("api.summary").of(session))
+		host:settle()
+	end
+	t.eq(calls_of(host, "row"), before, "the cursor's row is the same row")
+end)
+
+t.test("the output panel follows the cursor", function()
+	local host = open(PODS)
+	click(host, "tab-output")
+	host:settle()
+	t.ok(page_host.says(host.tree, "api-1"))
+	host:key("down")
+	host:settle()
+	t.ok(page_host.says(host.tree, "web-1"), "the row Send would send now")
+end)
