@@ -40,4 +40,12 @@ function M.stale()
 	error({ code = "stale", message = "the list has changed since" }, 0)
 end
 
+-- Refuses a call made in another list than the one there is. A call that names none is made in
+-- the list as it is (a page always names the one it saw).
+function M.in_list(view, gen)
+	if gen ~= nil and gen ~= view.gen then
+		M.stale()
+	end
+end
+
 return M

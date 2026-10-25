@@ -47,6 +47,26 @@ function M.integer(minimum, maximum)
 	end
 end
 
+local function finite(value)
+	return type(value) == "number" and value == value and value ~= math.huge
+		and value ~= -math.huge
+end
+
+function M.number(minimum, maximum)
+	return function(value, path)
+		if not finite(value) then
+			return wrong(path, "expected a number, got " .. describe(value))
+		end
+		if minimum and value < minimum then
+			return wrong(path, "expected at least " .. minimum)
+		end
+		if maximum and value > maximum then
+			return wrong(path, "expected at most " .. maximum)
+		end
+		return value
+	end
+end
+
 function M.boolean()
 	return function(value, path)
 		if type(value) ~= "boolean" then

@@ -28,7 +28,7 @@ function M.calls(session)
 	-- ends.
 	calls.choose = call.new(
 		p.object({
-			gen = p.integer(0),
+			gen = p.optional(p.integer(0)),
 			cursor = p.optional(p.integer(1)),
 			fields = p.optional(p.array(p.string(), 200)),
 		}),
@@ -36,9 +36,7 @@ function M.calls(session)
 			if session:answered() then
 				return { chosen = 0 }
 			end
-			if args.gen ~= view.gen then
-				call.stale()
-			end
+			call.in_list(view, args.gen)
 			local shape = session:shape_of(args.fields)
 			local problem = output.problem_of(shape, rows.names)
 			if problem then

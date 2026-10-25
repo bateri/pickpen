@@ -327,8 +327,9 @@ local function open_input(options, on_data, on_end)
 		return pencere.io.read_stdin(on_data, on_end)
 	end
 	local ok, stat = pcall(pencere.fs.stat, options.file)
-	if not ok then
-		quit(66, "cannot read " .. options.file .. ": " .. tostring(stat))
+	if not ok or stat == nil then
+		local why = ok and "no such file" or tostring(stat)
+		quit(66, "cannot read " .. options.file .. ": " .. why)
 	end
 	if stat.kind ~= "file" then
 		quit(66, "cannot read " .. options.file .. ": it is not a file")

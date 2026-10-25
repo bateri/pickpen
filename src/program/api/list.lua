@@ -19,6 +19,8 @@ local M = {}
 -- in a column's width and shows a row whole by asking for it (`row`).
 local MOST_ROWS = 200
 local LONGEST_CELL = 256
+-- How long `open` waits for an input to end, if the page does not say.
+local OPEN_WAIT = 0.3
 -- How much of the program's stream one answer takes, as the stream counts it.
 local MOST_BYTES = 512 * 1024
 
@@ -44,15 +46,16 @@ function M.calls(session)
 	local view, rows = session.view, session.table
 	local calls = {}
 
-	local function current(gen)
-		if gen ~= view.gen then
-			call.stale()
-		end
-	end
-
-	-- What the view starts from, as the command line set it, and the list as it is.
-	calls.open = call.new(p.object({}), function()
+	-- What the view starts from, as the command line set it, and the list as it is. A moment is
+	-- given to the input first (`wait` seconds at most, a third of one if the page says no more),
+	-- so that the page opens on the rows of an input that is quick, and not on nothing.
+	local open_schema = p.object({ wait = p.optional(p.number(0, 60)) })
+	calls.open = call.new(open_schema, function(args)
 		local options = session.options
+		local until_ = pencere.time.monotonic() + (args.wait or OPEN_WAIT)
+		while not rows.done and pencere.time.monotonic() < until_ do
+			pencere.time.sleep(0.01)
+		end
 		return {
 			version = version,
 			title = options.title,
@@ -103,12 +106,12 @@ function M.calls(session)
 
 	-- The rows at these places of the list, each with whether it is marked.
 	local window_schema = p.object({
-		gen = p.integer(0),
+		gen = p.optional(p.integer(0)),
 		from = p.integer(1),
 		count = p.integer(1, MOST_ROWS),
 	})
 	calls.window = call.new(window_schema, function(args)
-		if args.gen ~= view.gen then
+		if args.gen ~= nil and args.gen ~= view.gen then
 			return { gen = view.gen, stale = true }
 		end
 		local out, bytes = {}, 0
@@ -131,9 +134,9 @@ function M.calls(session)
 	end)
 
 	-- One row whole, as the side panel and the copy want it.
-	local row_schema = p.object({ gen = p.integer(0), pos = p.integer(1) })
+	local row_schema = p.object({ gen = p.optional(p.integer(0)), pos = p.integer(1) })
 	calls.row = call.new(row_schema, function(args)
-		current(args.gen)
+		call.in_list(view, args.gen)
 		local id = view.shown[args.pos]
 		if id == nil then
 			error({ code = "not-found", message = "there is no such row" }, 0)
@@ -144,14 +147,14 @@ function M.calls(session)
 
 	-- Marks. `range` marks (or unmarks) positions `from` to `to`; the others are the whole list.
 	local mark_schema = p.object({
-		gen = p.integer(0),
+		gen = p.optional(p.integer(0)),
 		op = p.enum("range", "all", "none", "invert"),
 		from = p.optional(p.integer(1)),
 		to = p.optional(p.integer(1)),
 		on = p.optional(p.boolean()),
 	})
 	calls.mark = call.new(mark_schema, function(args)
-		current(args.gen)
+		call.in_list(view, args.gen)
 		local on = args.on ~= false
 		if args.op == "range" then
 			if args.from == nil or args.to == nil then

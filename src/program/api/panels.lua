@@ -24,12 +24,6 @@ function M.calls(session)
 	local view, rows = session.view, session.table
 	local calls = {}
 
-	local function current(gen)
-		if gen ~= view.gen then
-			call.stale()
-		end
-	end
-
 	local function column_of(number)
 		if number > #rows.names then
 			error({ code = "bad-params", message = "column: there is no such column" }, 0)
@@ -42,9 +36,9 @@ function M.calls(session)
 	-- edge of a bar with the quantity as a query writes it, so that a click or a drag is a term
 	-- the program wrote, with its own quoting.
 	calls.column = call.new(
-		p.object({ gen = p.integer(0), column = p.integer(1) }),
+		p.object({ gen = p.optional(p.integer(0)), column = p.integer(1) }),
 		function(args)
-			current(args.gen)
+			call.in_list(view, args.gen)
 			local column = column_of(args.column)
 			local name = rows.names[column]
 			local stats = query.stats.column(rows.rows, view.shown, column, { buckets = BUCKETS })
@@ -86,12 +80,12 @@ function M.calls(session)
 	-- function that writes it, with the command line that does it again and whether it does.
 	calls.output = call.new(
 		p.object({
-			gen = p.integer(0),
+			gen = p.optional(p.integer(0)),
 			cursor = p.optional(p.integer(1)),
 			fields = fields_schema,
 		}),
 		function(args)
-			current(args.gen)
+			call.in_list(view, args.gen)
 			local shape = session:shape_of(args.fields)
 			local problem = output.problem_of(shape, rows.names)
 			local line = again.of(session, args.fields)
@@ -117,12 +111,12 @@ function M.calls(session)
 		-- the last one, or the page gave it up.
 		calls.preview = call.new(
 			p.object({
-				gen = p.integer(0),
+				gen = p.optional(p.integer(0)),
 				pos = p.integer(1),
-				width = p.integer(10, 1000),
+				width = p.optional(p.integer(10, 1000)),
 			}),
 			function(args, running)
-				current(args.gen)
+				call.in_list(view, args.gen)
 				local id = view.shown[args.pos]
 				local record = id and rows.rows[id]
 				if record == nil then
@@ -134,7 +128,7 @@ function M.calls(session)
 				end
 				local command = output.command_for(session.options.preview, record, rows:source())
 				local result
-				local handle = output.preview.run(command, args.width, function(done)
+				local handle = output.preview.run(command, args.width or 100, function(done)
 					result = done
 				end)
 				session.previewing = handle
