@@ -827,7 +827,9 @@ local function head_row()
 		local cell = div():press(id):grow(1):min_w(0):h(HEAD):px(6):row():items_center()
 			:bg(ui.hover == id and "raised3" or nil)
 			:child(div():grow(1):min_w(0):child(label))
-		local handle = div():press(edge):w(6):h(HEAD):no_shrink()
+		-- The edge to drag stands over the cell's right end, so that the text of a heading is where
+		-- the text of its column is.
+		local handle = div():press(edge):absolute():inset(0, 0, 0, nil):w(6)
 			:bg(alpha("border", ui.hover == edge and 1 or 0.4))
 		row:child(div():row():items_center():h(HEAD):w(column_width(index)):min_w(0)
 			:child(cell):child(handle))
