@@ -293,6 +293,24 @@ function View:matching(source)
 	return query.filter(self.table.rows, rule)
 end
 
+-- The ids of the rows the query keeps when it leaves out the terms on `column`: what the column's
+-- panel lists, so that the values the column is being narrowed to are listed with the ones it
+-- could be narrowed to instead.
+function View:without(column)
+	local kept, dropped = {}, false
+	for _, entry in ipairs(self.terms) do
+		if entry.term.kind == "field" and entry.term.column == column then
+			dropped = true
+		else
+			kept[#kept + 1] = entry.term
+		end
+	end
+	if not dropped then
+		return self.shown
+	end
+	return query.filter(self.table.rows, query.compile({ terms = kept, empty = #kept == 0 }))
+end
+
 function View:is_marked(id)
 	return self.marked[id] == true
 end

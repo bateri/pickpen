@@ -31,7 +31,8 @@ function M.calls(session)
 		return number
 	end
 
-	-- A column of the rows the query keeps: its values by how often they come, and a chart of
+	-- A column of the rows the query keeps (without its own terms, so that the values it is
+	-- narrowed to are listed with the others): its values by how often they come, and a chart of
 	-- its quantities. Every value comes with the term that keeps the rows that have it, and every
 	-- edge of a bar with the quantity as a query writes it, so that a click or a drag is a term
 	-- the program wrote, with its own quoting.
@@ -41,7 +42,8 @@ function M.calls(session)
 			call.in_list(view, args.gen)
 			local column = column_of(args.column)
 			local name = rows.names[column]
-			local stats = query.stats.column(rows.rows, view.shown, column, { buckets = BUCKETS })
+			local kept = view:without(column)
+			local stats = query.stats.column(rows.rows, kept, column, { buckets = BUCKETS })
 			for _, entry in ipairs(stats.top) do
 				entry.term = query.quote_name(name) .. "=" .. query.quote_value(entry.value)
 				entry.not_term = query.quote_name(name) .. "!=" .. query.quote_value(entry.value)
