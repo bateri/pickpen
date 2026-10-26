@@ -111,6 +111,11 @@ local function render(size, now, reduce_motion)
 	end
 	local root = build()
 	L.ui.fades:advance(now, reduce_motion)
+	-- What the build asked for later (what goes out, a column, a preview, once the cursor rests).
+	local due = A.next_due()
+	if due then
+		wake = wake and math.min(wake, due) or due
+	end
 	-- The dot that says the input is still coming pulses while it does: a few steps a second are
 	-- enough for it, and an input that never ends (`tail -f`) costs no more than that.
 	if not S.sum.done and not reduce_motion then

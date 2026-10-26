@@ -410,3 +410,18 @@ t.test("a click on the box in front of a row marks it, a double-click on a row s
 	-- Rows are marked: a double-click marks, and does not send.
 	t.eq(k:last_call("choose"), nil)
 end)
+
+t.test("what goes out follows the cursor once it rests, without waiting for another key", function()
+	local k = opened()
+	local before = #k:calls_of("output")
+	k:event({ type = "key", key = "down", mods = {} })
+	k.program:serve(k)
+	-- The frame of the key: the page asks to be drawn again a moment later, on its own.
+	local _, _, wake = k:render(W, H, 200)
+	t.ok(wake ~= nil and wake <= 200.2, "the page wakes itself, at " .. tostring(wake))
+	k:render(W, H, wake)
+	k.program:serve(k)
+	local calls = k:calls_of("output")
+	t.ok(#calls > before, "asked what goes out again")
+	t.eq(calls[#calls].params.cursor, 1)
+end)

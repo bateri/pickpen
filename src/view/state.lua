@@ -111,6 +111,16 @@ function A.later(name, delay, run)
 	S.timers[name] = { at = S.now + delay, run = run }
 end
 
+-- When the next thing asked for later is due, or nil: what is set going while the page is built
+-- (a preview, what goes out) wakes the page then, so that it is not left until the next key.
+function A.next_due()
+	local next_at = nil
+	for _, timer in pairs(S.timers) do
+		next_at = next_at and math.min(next_at, timer.at) or timer.at
+	end
+	return next_at
+end
+
 -- Runs what is due; the time of the next one, for the page to be drawn again then.
 function A.tick()
 	local next_at = nil
