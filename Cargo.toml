@@ -1,0 +1,29 @@
+[package]
+name = "pickpen"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Choose rows in the middle of a pipeline, in a real interface in the terminal pane"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/bateri/pickpen"
+publish = false
+
+[[bin]]
+name = "pickpen"
+path = "src/program/main.rs"
+
+[dependencies]
+# Pinned to a commit of pencere's main until the release that carries `App` and `pencere dev` for
+# Cargo projects; then "0.4".
+pencere = { git = "https://github.com/bateri/pencere", rev = "84d139696e674713f28b4b3f9089a5adf3670dd8" }
+serde_json = { version = "1", features = ["preserve_order"] }
+libc = "0.2"
+
+# The build script carries src/view/ and src/assets/ into the binary (`pencere::build::app`).
+[build-dependencies]
+pencere = { git = "https://github.com/bateri/pencere", rev = "84d139696e674713f28b4b3f9089a5adf3670dd8" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
