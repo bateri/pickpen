@@ -1,7 +1,7 @@
-// Draws pickpen's icon, its mark (the Mark in src/view/components/Mark.tsx: three rows, the
-// first and the last of them chosen), as PNGs in data: URIs, and writes them to
-// src/server/icon.ts. A terminal draws a program's icon only from the bytes it is given,
-// so the server carries them; run this again after changing the shapes here and there.
+// Draws pickpen's icon, its mark (src/assets/mark.svg, which the view shows: three rows, the
+// first and the last of them chosen), as PNGs, and writes them to src/assets/icon-<side>-<theme>.png.
+// A terminal draws a program's icon only from the bytes it is given, so the program carries them
+// (src/program/icons.rs); run this again after changing the shapes here and there.
 //
 //   node tools/icon.mjs
 //
@@ -90,31 +90,11 @@ function png(side, pixels) {
   ]);
 }
 
-const icons = [];
+let count = 0;
 for (const [theme, colour] of Object.entries(COLOURS)) {
   for (const side of SIDES) {
-    const src = `data:image/png;base64,${draw(side, colour).toString("base64")}`;
-    icons.push(
-      `  {\n    src: "${src}",\n    mimeType: "image/png",\n    sizes: ["${side}x${side}"],\n    theme: "${theme}",\n  },`,
-    );
+    writeFileSync(new URL(`../src/assets/icon-${side}-${theme}.png`, import.meta.url), draw(side, colour));
+    count += 1;
   }
 }
-
-const path = new URL("../src/server/icon.ts", import.meta.url);
-writeFileSync(
-  path,
-  `// Written by tools/icon.mjs; change the shapes there and run it again.
-
-import type { Icon } from "@modelcontextprotocol/server";
-
-/**
- * pickpen's icon, the mark its view shows, for a dark ground and a light one (MCP's \`theme\`),
- * 32 and 64 pixels a side, as PNGs in \`data:\` URIs: a terminal draws an icon only from the
- * bytes it is given, and never fetches one.
- */
-export const ICONS: Icon[] = [
-${icons.join("\n")}
-];
-`,
-);
-console.log(`wrote ${icons.length} icons to src/server/icon.ts`);
+console.log(`wrote ${count} icons to src/assets/`);

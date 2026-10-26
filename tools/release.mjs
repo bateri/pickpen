@@ -1,36 +1,42 @@
-// Releases pickpen: one script for every step a machine can check, so a release is
-// the same sequence every time. RELEASING.md is the procedure, this file the checks.
+// Releases pickpen: one script for every step a machine can check, so a release is the same
+// sequence every time. RELEASING.md is the procedure, this file the checks.
 //
-//   prepare <version>   set the version, move Unreleased into a dated section of CHANGELOG.md
-//   check               everything a release needs, without changing anything
-//   tag                 check, then create the annotated tag v<version>
-//   push                push main and the tag together (what starts the release workflow)
-//   local               publish from this machine, then push (the first release)
-//   approve             make public the version the workflow staged on npm
-//   verify-tag <tag>    in the workflow: the tag names the manifest's version, on main
-//   registry <version>  in the workflow: is the package, and this version, on npm
+// On a maintainer's machine:
+//
+//   prepare <version>   set the version, move Unreleased into a dated section of CHANGELOG.md; the
+//                       commit of it, pushed to main, is what starts a release
+//   rehearse            everything a release of the prepared version checks, on any branch
 //   notes [<version>]   the CHANGELOG section of a version
+//   version             the version pickpen says it is (Cargo.toml)
 //
-// It uses nothing but Node, git and npm.
+// In the release workflow (.github/workflows/release.yml), after the gate is green on main:
+//
+//   plan                whether this commit's version has no tag yet (or, started by hand, has one
+//                       on this commit and a draft to finish): what the workflow reads
+//   dist [dir]          the files of a release in dir (dist/release), checked: the three
+//                       executables of this version and the SHA256SUMS that names them
+//   tag                 the annotated tag v<version> on this commit, pushed
+//   draft [dir]         the GitHub release of the tag as a draft, with the notes and the files
+//   publish             once a maintainer has approved: the draft's files checked against their
+//                       sums and attestations, and the draft made public as the Latest
+//
+// It uses nothing but Node, git and gh.
 
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const NAME = "pickpen";
 
-/** The files the package must carry: what it runs, and what a person reads before running it. */
-const REQUIRED = [
-  "package.json",
-  "LICENSE",
-  "README.md",
-  "CHANGELOG.md",
-  "dist/node/server/main.js",
-  "dist/view/index.html",
-  "dist/single/index.html",
-];
+/** The systems pickpen is built for (the Makefile's TARGETS, the release workflow's builds). */
+const TARGETS = ["aarch64-apple-darwin", "aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl"];
+
+/** Where `make dist` puts the files of a release. */
+const RELEASE_DIR = join(root, "dist", "release");
 
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/;
 const RELEASED = /^## \[(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\] - (\d{4}-\d{2}-\d{2})$/;
@@ -62,24 +68,25 @@ function succeeds(command, args, options = {}) {
 
 const tagOf = (version) => `v${version}`;
 
-// ---- the manifest's version ------------------------------------------------
+// ---- the version ---------------------------------------------------------------
+
+/** The version of pickpen: the package's, in Cargo.toml, and the lockfile's entry for it. */
+const MANIFEST = join(root, "Cargo.toml");
+const LOCKFILE = join(root, "Cargo.lock");
+const PACKAGE_VERSION = /^(\[package\][^[]*?\nversion = ")([^"]+)(")/m;
+const LOCKED_VERSION = /(\[\[package\]\]\nname = "pickpen"\nversion = ")([^"]+)(")/;
 
 function versionOf() {
-  return JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
+  const version = PACKAGE_VERSION.exec(readFileSync(MANIFEST, "utf8"))?.[2];
+  if (version === undefined) refuse("Cargo.toml does not say a version");
+  return version;
 }
 
 function setVersion(version) {
-  const path = join(root, "package.json");
-  const manifest = JSON.parse(readFileSync(path, "utf8"));
-  manifest.version = version;
-  writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
-  // The lockfile records the package's own version twice: at its top and as its root package.
-  const lockPath = join(root, "package-lock.json");
-  const lock = JSON.parse(readFileSync(lockPath, "utf8"));
-  lock.version = version;
-  if (lock.packages?.[""] === undefined) refuse("package-lock.json has no root package");
-  lock.packages[""].version = version;
-  writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+  writeFileSync(MANIFEST, readFileSync(MANIFEST, "utf8").replace(PACKAGE_VERSION, `$1${version}$3`));
+  const lock = readFileSync(LOCKFILE, "utf8");
+  if (!LOCKED_VERSION.test(lock)) refuse("Cargo.lock has no entry for pickpen: run cargo build first");
+  writeFileSync(LOCKFILE, lock.replace(LOCKED_VERSION, `$1${version}$3`));
 }
 
 // ---- the changelog ---------------------------------------------------------
@@ -148,15 +155,19 @@ function prepare(version) {
   writeFileSync(changelogPath, lines.join("\n"));
   setVersion(version);
   console.log(`${NAME} ${current} -> ${version}`);
-  console.log(`next: review, commit ("Release ${NAME} ${version}"), then make release`);
+  console.log(
+    `next: review, commit ("Release ${NAME} ${version}") and push to main: the release workflow takes it from there`,
+  );
 }
 
-function check() {
+/**
+ * What the version must be to be released: prepared (a dated section, nothing left under
+ * Unreleased) and after the last release's tag. Asks nothing but the files and the tags.
+ */
+function versionChecks() {
   const version = versionOf();
-  const tag = tagOf(version);
-
   if (!SEMVER.test(version ?? "") || version === "0.0.0") {
-    refuse(`package.json is at "${version}": run make release-prepare first`);
+    refuse(`Cargo.toml is at "${version}": run make release-prepare first`);
   }
   if (unreleased().body !== "") {
     refuse("CHANGELOG.md: Unreleased is not empty; prepare moves it into the release");
@@ -166,156 +177,317 @@ function check() {
     refuse(`CHANGELOG.md: the newest section is not ${version}`);
   }
   releasedSection(version);
-
-  if (run("git", ["branch", "--show-current"]) !== "main") refuse("not on main");
-  if (run("git", ["status", "--porcelain"]) !== "") refuse("the working tree is not clean");
-  run("git", ["fetch", "--quiet", "origin", "main", "--tags"]);
-  if (!succeeds("git", ["merge-base", "--is-ancestor", "origin/main", "HEAD"])) {
-    refuse("main has diverged from origin/main");
-  }
-  if (succeeds("git", ["rev-parse", "--verify", "--quiet", `refs/tags/${tag}`])) {
-    refuse(`the tag ${tag} exists`);
-  }
-  const released = run("git", ["tag", "--list", "v*"])
+  const last = run("git", ["tag", "--list", "v*"])
     .split("\n")
     .map((name) => name.slice(1))
-    .filter((v) => SEMVER.test(v));
-  const last = released.sort(compare).at(-1);
+    .filter((v) => SEMVER.test(v) && v !== version)
+    .sort(compare)
+    .at(-1);
   if (last !== undefined && compare(version, last) <= 0) {
     refuse(`${version} is not after ${last}, the last release`);
   }
-  if (run("git", ["ls-remote", "--tags", "origin", `refs/tags/${tag}`]) !== "") {
-    refuse(`the tag ${tag} exists on origin`);
-  }
+  return { version, tag: tagOf(version), section };
+}
 
-  const files = contents();
-  for (const file of REQUIRED) {
-    if (!files.includes(file)) refuse(`the package lacks ${file}`);
+const tagExists = (tag) =>
+  succeeds("git", ["rev-parse", "--verify", "--quiet", `refs/tags/${tag}`]);
+const tagIsHead = (tag) =>
+  run("git", ["rev-list", "-n", "1", tag]) === run("git", ["rev-parse", "HEAD"]);
+
+/** `isDraft` of the GitHub release of a tag, or "none". */
+function releaseState(tag) {
+  try {
+    return JSON.parse(run("gh", ["release", "view", tag, "--json", "isDraft"])).isDraft
+      ? "draft"
+      : "public";
+  } catch (error) {
+    if (String(error.stderr ?? "").includes("release not found")) return "none";
+    refuse(
+      `cannot ask GitHub about the release ${tag}: ${String(error.stderr ?? error.message).trim()}`,
+    );
   }
-  const stray = files.filter(
-    (file) => file.startsWith("test/") || file.startsWith("src/") || file.startsWith("harness/"),
+}
+
+/** Everything a release of the prepared version checks, on any branch: what `make rehearse` runs. */
+function rehearse() {
+  const { version, tag } = versionChecks();
+  if (tagExists(tag)) refuse(`the tag ${tag} exists`);
+  console.log(`${NAME} ${version} is ready to be released as ${tag}`);
+}
+
+/** The run of the gate (check.yml) for the commit, on main, must have finished, and well. */
+function requireGreenCheck(sha) {
+  const runs = JSON.parse(
+    run("gh", [
+      "run",
+      "list",
+      "--workflow",
+      "check.yml",
+      "--event",
+      "push",
+      "--branch",
+      "main",
+      "--commit",
+      sha,
+      "--limit",
+      "10",
+      "--json",
+      "databaseId,status,conclusion",
+    ]),
   );
-  if (stray.length > 0) refuse(`the package carries what it does not run: ${stray.join(", ")}`);
-  console.log(`${NAME} ${version} is ready to tag as ${tag}`);
-  return { version, tag, section };
+  const [latest] = runs;
+  if (latest === undefined) refuse(`no run of the gate for ${sha.slice(0, 7)} on main`);
+  if (latest.status !== "completed") {
+    refuse(
+      `the gate's run ${latest.databaseId} for ${sha.slice(0, 7)} is ${latest.status}: wait for it`,
+    );
+  }
+  if (latest.conclusion !== "success") {
+    refuse(
+      `the gate's run ${latest.databaseId} for ${sha.slice(0, 7)} ended in ${latest.conclusion}`,
+    );
+  }
 }
 
-/** The files npm would publish, as paths inside the package. */
-function contents() {
-  // The build `prepack` runs before a publish, run here on its own: run by `npm pack`, its output
-  // would land in the middle of the report.
-  run("npm", ["run", "build"]);
-  const report = JSON.parse(run("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"]));
-  return report[0].files.map((file) => file.path);
+/**
+ * Whether to release this commit, for the workflow to read from its output file: its version has
+ * no tag yet, or (started by hand, `RELEASE_RESUME`) has one on this commit whose release is a
+ * draft still, to be finished. A commit whose version is tagged and not asked to resume is not a
+ * release, whatever its changelog has gone on to.
+ */
+function plan() {
+  const resume = process.env.RELEASE_RESUME === "true";
+  if (process.env.RELEASE_REQUIRE_CHECK === "true")
+    requireGreenCheck(run("git", ["rev-parse", "HEAD"]));
+  const version = versionOf();
+  let release = true;
+  if (tagExists(tagOf(version)) && !resume) {
+    console.error(`${tagOf(version)} exists: nothing to release`);
+    release = false;
+  } else {
+    const { tag } = versionChecks();
+    if (tagExists(tag)) {
+      if (!tagIsHead(tag)) refuse(`${tag} is on another commit: a tag is never moved`);
+      if (releaseState(tag) === "public") refuse(`the GitHub release ${tag} is public already`);
+    }
+    console.error(`${NAME} ${version} is to be released as ${tag}`);
+  }
+  // Read by the workflow from its output file.
+  console.log(`release=${release}`);
+  console.log(`version=${version}`);
+  console.log(`tag=${tagOf(version)}`);
 }
 
+/** The files of a release in `dir`, checked: what the workflow attests and the draft carries. */
+function dist(dir) {
+  const files = releaseFiles(versionOf(), dir ? resolve(dir) : RELEASE_DIR, { execute: true });
+  console.log(`${files.length} files of ${NAME} ${versionOf()}: ${files.join(", ")}`);
+}
+
+/** The executable of a release for a target. */
+const fileOf = (version, target) => `${NAME}-${version}-${target}`;
+
+/** The target of the machine this runs on, for the one executable it can run. */
+function ownTarget() {
+  const arch = { arm64: "aarch64", x64: "x86_64" }[process.arch];
+  if (arch === undefined) return undefined;
+  if (process.platform === "darwin") return `${arch}-apple-darwin`;
+  if (process.platform === "linux") return `${arch}-unknown-linux-musl`;
+  return undefined;
+}
+
+/**
+ * The files `make dist` made for this version: the three executables and the SHA256SUMS that names
+ * exactly them, each with the sum it lists. The names carry the version, so a dist/release made
+ * before the version moved is refused; with `execute`, the one executable this machine can run says
+ * its version.
+ */
+function releaseFiles(version, dir = RELEASE_DIR, { execute = false } = {}) {
+  if (!existsSync(dir)) refuse(`no ${dir}: make dist, after the release commit`);
+  const expected = TARGETS.map((target) => fileOf(version, target));
+  const found = readdirSync(dir).sort();
+  const wanted = [...expected, "SHA256SUMS"].sort();
+  if (found.join("\n") !== wanted.join("\n")) {
+    refuse(
+      `the release's directory holds ${found.join(", ") || "nothing"} and a release of ${version} is ${wanted.join(", ")}: make dist again, after the release commit`,
+    );
+  }
+  const listed = new Map(
+    readFileSync(join(dir, "SHA256SUMS"), "utf8")
+      .split("\n")
+      .filter((line) => line.trim() !== "")
+      .map((line) => {
+        const [sum, name] = line.split(/\s+/);
+        return [name.replace(/^\*/, ""), sum];
+      }),
+  );
+  if ([...listed.keys()].sort().join("\n") !== [...expected].sort().join("\n")) {
+    refuse("SHA256SUMS does not name exactly the three executables");
+  }
+  for (const name of expected) {
+    const sum = createHash("sha256")
+      .update(readFileSync(join(dir, name)))
+      .digest("hex");
+    if (listed.get(name) !== sum)
+      refuse(`${name} is not the file SHA256SUMS lists: make dist again`);
+  }
+  // Where the files were made (a download or an artifact keeps no mode, so only there).
+  const own = execute ? ownTarget() : undefined;
+  if (own !== undefined) {
+    const said = run(join(dir, fileOf(version, own)), ["--version"]);
+    if (said !== `${NAME} ${version}`)
+      refuse(`${fileOf(version, own)} says it is ${said}: make dist again`);
+  }
+  return [...expected, "SHA256SUMS"];
+}
+
+/** The annotated tag of the version on this commit, pushed; left as it is if it is there. */
 function tag() {
-  const { tag: tagName, section, version } = check();
+  const { version, tag: tagName, section } = versionChecks();
+  if (tagExists(tagName)) {
+    if (!tagIsHead(tagName)) refuse(`${tagName} is on another commit: a tag is never moved`);
+    console.log(`${tagName} is on this commit already`);
+    return;
+  }
   // Verbatim: the default cleanup would take the section's "### Added" lines for comments.
   const message = `${NAME} ${version}\n\n${section.body}\n`;
   run("git", ["tag", "--annotate", "--cleanup=verbatim", tagName, "--message", message]);
-  // The workflow cannot stage a package the registry does not know yet.
-  const next = succeeds("npm", ["view", NAME, "name"]) ? "publish" : "publish-local";
-  console.log(`tagged ${tagName}; nothing is pushed. Next: make ${next}`);
+  run("git", ["push", "--quiet", "origin", `refs/tags/${tagName}`], {
+    stdio: "inherit",
+  });
+  console.log(`tagged ${tagName} and pushed it`);
 }
 
-function currentTag() {
+/** The GitHub release of the tag as a draft: the changelog section, the files. Made again if a draft is there. */
+function draft(dir) {
   const version = versionOf();
   const tagName = tagOf(version);
-  if (!succeeds("git", ["rev-parse", "--verify", "--quiet", `refs/tags/${tagName}`])) {
-    refuse(`no tag ${tagName}: run make release first`);
-  }
-  if (run("git", ["rev-list", "-n", "1", tagName]) !== run("git", ["rev-parse", "HEAD"])) {
-    refuse(`${tagName} is not on HEAD`);
-  }
-  return { version, tagName };
+  const files = releaseFiles(version, dir ? resolve(dir) : RELEASE_DIR).map((name) =>
+    join(dir ? resolve(dir) : RELEASE_DIR, name),
+  );
+  const state = releaseState(tagName);
+  if (state === "public")
+    refuse(`the GitHub release ${tagName} is public already: it is never touched`);
+  if (state === "draft") run("gh", ["release", "delete", tagName, "--yes"]);
+  // `--verify-tag`: the release is made on the tag that was pushed, never on a tag gh would make.
+  execFileSync(
+    "gh",
+    [
+      "release",
+      "create",
+      tagName,
+      "--verify-tag",
+      "--draft",
+      "--title",
+      tagName,
+      "--notes-file",
+      "-",
+      ...files,
+    ],
+    {
+      cwd: root,
+      input: releasedSection(version).body,
+      stdio: ["pipe", "inherit", "inherit"],
+    },
+  );
+  console.log(`made the draft of ${tagName} with ${files.length} files`);
 }
 
-function push() {
-  const { tagName } = currentTag();
-  run("git", ["push", "--atomic", "origin", "main", tagName], { stdio: "inherit" });
-  console.log(`pushed main and ${tagName}; the release workflow takes it from here`);
+/**
+ * Makes the draft public, as the repository's Latest, once its files are the ones built: the
+ * sums, and the attestation that this repository's release workflow built each. What the workflow
+ * does once a maintainer has approved it.
+ */
+/**
+ * The environment the workflow publishes in (`RELEASE_ENVIRONMENT`, "release") must have someone
+ * who approves: GitHub makes an environment a job names and that is not there, with no rule, and
+ * runs the job at once, so a release would be public with nobody's word . A run
+ * outside the workflow (no `RELEASE_ENVIRONMENT`) is not asked.
+ */
+function requireReviewers() {
+  const environment = process.env.RELEASE_ENVIRONMENT;
+  if (environment === undefined || environment === "") return;
+  const repo =
+    process.env.GITHUB_REPOSITORY ||
+    run("gh", ["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]);
+  let rules;
+  try {
+    rules = JSON.parse(
+      run("gh", ["api", `repos/${repo}/environments/${environment}`]),
+    ).protection_rules;
+  } catch (error) {
+    refuse(
+      `cannot ask GitHub about the environment ${environment}: ${String(error.stderr ?? error.message).trim()}`,
+    );
+  }
+  const reviewers = (rules ?? [])
+    .filter((rule) => rule.type === "required_reviewers")
+    .flatMap((rule) => rule.reviewers ?? []);
+  if (reviewers.length === 0) {
+    refuse(
+      `the environment ${environment} has no required reviewers, so nobody approved this: add them in the repository's Settings, Environments, ${environment}, then run the workflow again (RELEASING.md)`,
+    );
+  }
 }
 
-/** How long `local` waits for npm to list what it published, and how often it asks. */
-const LISTING = { minutes: 15, every: 15_000 };
-
-function local() {
-  const { version, tagName } = currentTag();
-  run("npm", ["publish"], { stdio: "inherit" });
-  // npm processes a new package for minutes before it lists it, and the workflow the push
-  // starts asks npm whether the version is there: one that asks too early fails.
-  console.log(`waiting for npm to list ${NAME} ${version} before pushing`);
-  const deadline = Date.now() + LISTING.minutes * 60_000;
-  while (!succeeds("npm", ["view", `${NAME}@${version}`, "version"])) {
-    if (Date.now() > deadline) {
-      refuse(
-        `npm has not listed ${NAME} ${version} in ${LISTING.minutes} minutes; once it does: git push --atomic origin main ${tagName}`,
+function publish() {
+  requireReviewers();
+  const version = versionOf();
+  const tagName = tagOf(version);
+  if (!tagExists(tagName)) refuse(`no tag ${tagName}: the workflow tags before it publishes`);
+  if (!tagIsHead(tagName)) refuse(`${tagName} is not on this commit`);
+  const state = releaseState(tagName);
+  if (state === "none") refuse(`${tagName} has no GitHub release: the workflow writes the draft`);
+  if (state === "public") refuse(`the GitHub release ${tagName} is public already`);
+  const dir = mkdtempSync(join(tmpdir(), "pickpen-publish-"));
+  try {
+    run("gh", ["release", "download", tagName, "--dir", dir, "--pattern", "*"], {
+      stdio: "inherit",
+    });
+    const files = releaseFiles(version, dir);
+    const repo = run("gh", ["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]);
+    for (const file of files) {
+      run(
+        "gh",
+        [
+          "attestation",
+          "verify",
+          join(dir, file),
+          "--repo",
+          repo,
+          "--signer-workflow",
+          `${repo}/.github/workflows/release.yml`,
+        ],
+        { stdio: "inherit" },
       );
     }
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, LISTING.every);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
-  run("git", ["push", "--atomic", "origin", "main", tagName], { stdio: "inherit" });
-  console.log(`published ${NAME} ${version} and pushed ${tagName}`);
-}
-
-/** `npm stage` needs npm 11.15 or later and Node 22 ships npm 10; the release workflow installs the same one. */
-const STAGE_NPM = ["--yes", "npm@11.21.1", "stage"];
-
-function approve() {
-  const version = versionOf();
-  const staged = JSON.parse(run("npx", [...STAGE_NPM, "list", NAME, "--json"])).filter(
-    (item) => item.version === version,
-  );
-  if (staged.length === 0) {
-    refuse(`npm holds no staged ${NAME} ${version}: has the release workflow staged it?`);
-  }
-  if (staged.length > 1) {
-    const ids = staged.map((item) => `${item.id} (${item.status})`).join(", ");
-    refuse(`npm holds more than one staged ${NAME} ${version}: ${ids}`);
-  }
-  // What is approved is shown first: who staged it and the shasum of what becomes public.
-  run("npx", [...STAGE_NPM, "view", staged[0].id], { stdio: "inherit" });
-  run("npx", [...STAGE_NPM, "approve", staged[0].id], { stdio: "inherit" });
-}
-
-function verifyTag(tagName) {
-  const match = /^v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/.exec(tagName ?? "");
-  if (match === null) refuse(`"${tagName}" is not a release tag (v<version>)`);
-  const version = match[1];
-  if (versionOf() !== version)
-    refuse(`${tagName} names ${version} but package.json is at ${versionOf()}`);
-  releasedSection(version);
-  run("git", ["fetch", "--quiet", "origin", "main"]);
-  if (!succeeds("git", ["merge-base", "--is-ancestor", tagName, "origin/main"])) {
-    refuse(`${tagName} is not on main`);
-  }
-  // Read by the workflow from its output file.
-  console.log(`version=${version}`);
-}
-
-function registry(version) {
-  const exists = succeeds("npm", ["view", NAME, "name"]);
-  const published = exists && succeeds("npm", ["view", `${NAME}@${version}`, "version"]);
-  // Read by the workflow from its output file.
-  console.log(`exists=${exists}`);
-  console.log(`published=${published}`);
+  run("gh", ["release", "edit", tagName, "--draft=false", "--latest"], {
+    stdio: "inherit",
+  });
+  console.log(`${NAME} ${version} is public: ${tagName}`);
 }
 
 function notes(version) {
   console.log(releasedSection(version ?? versionOf()).body);
 }
 
+function version() {
+  console.log(versionOf());
+}
+
 const COMMANDS = {
   prepare,
-  check,
+  rehearse,
+  plan,
+  dist,
   tag,
-  push,
-  local,
-  approve,
-  "verify-tag": verifyTag,
-  registry,
+  draft,
+  publish,
   notes,
+  version,
 };
 
 const [command, ...args] = process.argv.slice(2);

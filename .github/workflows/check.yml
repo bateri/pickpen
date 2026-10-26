@@ -1,5 +1,12 @@
-# The gate on every push to main and every pull request: `make check`, on Linux and macOS,
-# the two systems pickpen runs on.
+# The gate on every push to main and every pull request: `make check` (rustfmt, clippy and StyLua,
+# the program built, its tests, the view's tests against the kit, the built program played with
+# nobody to ask and in a pane by pencere's stand-in terminal, and the installer's tests), on Linux
+# and macOS.
+#
+# The view's tests run in the released `pencere` command of tools/pencere-version (its Lua runner),
+# against the kit's page API: the prelude of pencere at PENCERE_REF. The stand-in terminal has no
+# release, so it is built from that checkout too. Moving that commit is a change of this file (and,
+# while Cargo.toml takes pencere from git, of Cargo.toml's commit with it).
 name: check
 
 on:
@@ -10,6 +17,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # The commit of pencere the stand-in terminal is built from.
+  PENCERE_REF: 84d139696e674713f28b4b3f9089a5adf3670dd8
+
 jobs:
   check:
     strategy:
@@ -19,9 +30,39 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: bateri/pencere
+          ref: ${{ env.PENCERE_REF }}
+          path: pencere
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: make check
+      # The toolchain the crate's rust-version names, so a new lint of a later release does not turn
+      # the gate red on code nobody touched.
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: 1.88.0
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: gate
+          workspaces: |
+            . -> target
+            pencere -> target
+      - name: Install the pencere command
+        run: |
+          PENCERE_VERSION="$(cat tools/pencere-version)" PENCERE_INSTALL="$RUNNER_TEMP/pencere" \
+            sh -c "$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/bateri/pencere/main/cli/install.sh)"
+      - name: Build the stand-in terminal from pencere
+        working-directory: pencere
+        run: cargo build -p pencere-fake-host
+      - name: Install StyLua
+        run: cargo install stylua --locked --features luau --version 2.6.0 --root "$RUNNER_TEMP/stylua"
+      - name: make check
+        run: |
+          export PATH="$RUNNER_TEMP/stylua/bin:$PATH"
+          make check \
+            PENCERE="$RUNNER_TEMP/pencere/pencere" \
+            PRELUDE=pencere/kit/luau/prelude \
+            FAKE_HOST=pencere/target/debug/pencere-fake-host

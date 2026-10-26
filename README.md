@@ -108,14 +108,22 @@ The keys a terminal keeps for itself never reach a view — in bateri `⌘P`, `�
 
 ## Run it
 
-It needs Node 22 where it runs.
+pickpen is one file, with nothing to install beside it, for macOS on Apple silicon and Linux on
+arm64 and x86_64:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/bateri/pickpen/main/install.sh | sh
+```
+
+The installer takes the newest release (or `PICKPEN_VERSION=0.1.0`), checks it against the
+release's `SHA256SUMS`, and puts it in `~/.local/bin` (`PICKPEN_INSTALL=<dir>` puts it elsewhere).
+A file a browser downloads is quarantined by macOS; one curl downloads is not.
 
 To choose in a view you need a terminal that hosts pencere views. bateri is the first, and no
 release of it has them yet: until one does, build bateri from its `main` branch. `--where`
 without `--confirm` needs no terminal at all.
 
 ```sh
-npm install -g pickpen
 ps aux | pickpen --field PID | xargs kill
 git log --oneline | pickpen --preview 'git show --color {1}' --field 1 | xargs git cherry-pick
 pickpen --where 'level=error' --output json < app.jsonl > errors.json
@@ -127,6 +135,7 @@ pickpen --where 'level=error' --output json < app.jsonl > errors.json
 | 1      | none did: nothing was chosen, Send nothing, or `--where` matched nothing |
 | 2      | a person was needed and there was no terminal that shows pencere views   |
 | 64, 65 | the command line was wrong; the input could not be read as its shape     |
+| 66     | the file named could not be read                                         |
 | 130    | ⌃C                                                                       |
 
 **Nothing chosen, nothing sent.** Every command of a pipeline starts at once, and the one after
@@ -140,50 +149,47 @@ pods=$(kubectl get pods | pickpen --confirm --where 'STATUS!=Running' --field NA
 
 **Over ssh.** Install it on the server and run it there, in a pane of a terminal that hosts
 pencere: nothing listens on a port, the interface travels in the terminal's own stream, and it
-runs on your machine in a sandbox that reaches nothing but its program. Its files cross the
-stream once (about 300 kB); after that the terminal keeps them.
+runs on your machine in a sandbox that reaches nothing but its program. The rows stay on the
+server: the view asks for the ones in sight, a window at a time, and the program filters, sorts
+and marks them where they are, so a million rows are as quick to scroll as a hundred.
 
 pickpen is never an MCP server on stdio: its stdin and stdout are the pipeline's, and it does not
 guess whether it is in one (pencere §13).
 
 ## How it works
 
-- `src/server/input.ts` reads the input as it comes, telling its shape from the first lines, and
+- `src/program/input.rs` reads the input as it comes, telling its shape from the first lines, and
   keeps each record's own text, which is what goes out when the output has the input's shape.
-- `src/shared/query.ts` is the query, and the order; the view filters with it and `--where` runs
-  it, so the command line the view shows chooses what the view showed. A test runs `--where` and
-  a view sending the rows the query matches, in a pane, and compares the bytes.
-- `src/server/output.ts` writes what goes out; the view's picture of it is drawn by the same
+- `src/program/query.rs` is the query, and the order. The program holds the rows and runs it for
+  the view and for `--where` alike, so the command line the view shows chooses what the view
+  showed. A test runs `--where` and a view sending the rows the query matches, in a pane, and
+  compares the bytes.
+- `src/program/output.rs` writes what goes out; the view's picture of it is drawn by the same
   function.
-- `src/server/main.ts` is the one place that knows about the terminal: `serve` from
-  `@pencere/sdk`, with `filter`, opens the view on the terminal itself while stdin and stdout
-  carry the rows; a `ViewControl` closes it once the person has answered.
-- `src/view` is the interface: React and [Tabler icons](https://tabler.io/icons), talking MCP
-  Apps' messages to its host. It draws only the rows in sight, and asks the program for more as
-  they come.
+- `src/program/served.rs` and `picker.rs` are what the view asks of the program: the rows in sight,
+  the query, the order and the marks, a column's counts and chart, what goes out. `main.rs` is the
+  one place that knows about the terminal: the `pencere` crate opens the view on the terminal
+  itself (the controlling terminal) while stdin and stdout carry the rows.
+- `src/view` is the interface: a page of pencere's kit, in Lua, that the terminal draws in its own
+  font and theme, with [Lucide](https://lucide.dev) icons (`src/assets/icons`). It draws only the
+  rows in sight.
 
 ## Work on it
 
 ```sh
 git clone https://github.com/bateri/pickpen && cd pickpen
-npm install
-make check          # types, build, formatting, and the tests: the shapes, the query, the
-                    # output, the server, the program with nobody to ask, and pickpen in a
-                    # pipeline under pencere-fake-host when a pencere checkout is beside this one
-make harness        # http://localhost:5199 — the view in a stand-in host, on an input of demo/
+pencere dev         # the program in this pane, shown again as src/view/ changes
+make check          # formatting and clippy, the build, the program's tests, the built program
+                    # with nobody to ask and in a pane under pencere-fake-host, the installer
 ```
+
+`make check` needs Rust 1.88 or later, StyLua (`cargo install stylua --locked --features luau`),
+Node 22 for the tests of the built program, and a pencere checkout beside this one with its
+stand-in terminal built (`cargo build -p pencere-fake-host`). `make demo` writes the inputs of
+`demo/` — made-up pods, processes, an access log, servers and commits — the same every time.
 
 How a version is released is in [RELEASING.md](RELEASING.md), and what each one changed in
 [CHANGELOG.md](CHANGELOG.md).
-
-The harness plays the terminal in a browser: it frames the view with hot reload, sends it the
-colours of a terminal theme (bateri's, Tokyo Night, Gruvbox, Dracula, Solarized and more) and the
-size of a pane (80×24 up), and runs pickpen's own server on an input of `demo/` — made-up pods,
-processes, an access log, servers and commits, written by `make demo` the same every time — with
-the command line you give it. `drip` lets the input come a line at a time. When the view sends,
-the harness shows what would have gone to stdout. In its address, `input=`, `args=`, `theme=` and
-`size=` choose, `bare` shows the pane alone, and `built` shows the view `npm run build` wrote;
-`node tools/shot.mjs` takes the screenshots in `docs/` from it.
 
 ## License
 
