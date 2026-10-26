@@ -1,92 +1,60 @@
 # Releasing
 
-pickpen is published to npm as `pickpen`, and each release is tagged `v<x.y.z>` here.
-Every step a machine can check is in `tools/release.mjs`, behind the `make` targets below. This
-file is the order of the steps and the reasons for them.
+A release is three files on a GitHub release tagged `v<x.y.z>`, `pickpen-<version>-<target>` for
+macOS on Apple silicon and Linux on arm64 and x86_64 (linked statically, with musl), with a
+`SHA256SUMS`. There is no Intel Mac file, because bateri runs on Apple silicon only. People install
+it with `install.sh` (see the README).
+
+Each file is the Rust program with its view (`src/view/`, `src/assets/`) carried in it. The release
+workflow builds each on a runner of its own system and architecture, with the toolchain the gate runs
+with (Rust 1.88), from nothing.
 
 ## Versions and the changelog
 
-pickpen follows [semantic versioning](https://semver.org/). While it is `0.x`, a minor release
-may change what the previous one did.
+[Semantic versioning](https://semver.org/); while it is `0.x`, a minor release may change behaviour.
+Every change a user would notice goes under `## [Unreleased]` in `CHANGELOG.md`, in the same commit
+as the change.
 
-Every change a user would notice goes under `## [Unreleased]` in `CHANGELOG.md`
-([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)), in the same commit as the change. A
-release only moves that section under a version and a date; it does not write it.
+## pencere
+
+pickpen is built against the `pencere` crate. While it needs what pencere's `main` has and no
+release of it does, `Cargo.toml` takes it from git at a commit (`rev = "…"`), and `check.yml` builds
+the stand-in terminal of its tests from the same commit (`PENCERE_REF`); the two move together. A
+release of pickpen takes pencere from crates.io (`pencere = "0.4"`), so that what it is built from
+is a published version: switch to it, in a commit of its own, before `make release-prepare`.
 
 ## A release
 
-From a clean `main`:
+1. `make release-prepare VERSION=<x.y.z>` sets the version in `Cargo.toml` and `Cargo.lock` and
+   dates the changelog. Commit it as `Release pickpen <x.y.z>` and push it to `main`.
+2. The gate (`check.yml`) runs on the push. When it is green, the release workflow
+   (`release.yml`) starts.
+3. If the version has no tag yet, the workflow checks the version and changelog, builds the three
+   files, sums them, checks them and records their provenance, pushes the tag, and writes a
+   **draft** GitHub release.
+4. The run waits in the `release` environment. GitHub notifies the reviewers; one of them opens
+   the run and chooses **Review deployments → Approve**. The workflow then checks the files again
+   and makes the draft public as **Latest**. Rejected, nothing is published.
+5. Check it: `gh release view v<x.y.z>`, and run `install.sh` on a machine.
 
-1. `make release-prepare VERSION=0.2.0` sets the version in `package.json` and the lockfile and
-   turns `## [Unreleased]` into `## [0.2.0] - <today>` with a new, empty `## [Unreleased]`
-   above it. Read the diff, then commit it as `Release pickpen 0.2.0`.
-2. `make release` runs the gate (`make check`), then the release checks, then makes the annotated
-   tag `v0.2.0` with the changelog section as its message. Nothing is pushed.
-3. `make publish` pushes `main` and the tag in one atomic push. From here the release workflow
-   (`.github/workflows/release.yml`) takes over:
-   - it checks that the tag names the version `package.json` and the changelog carry, on `main`;
-   - it runs the gate on Linux;
-   - it stages the package on npm through trusted publishing, which also records where it was
-     built (provenance);
-   - it writes the GitHub release from the changelog section.
-4. `make approve` once the workflow has staged the version. It is not public until a maintainer
-   approves it with 2FA: the target shows the staged version (who staged it, its shasum) and
-   approves it, and npm asks for the second factor, so run it in a terminal. The same can be
-   done on npmjs.com, under the package's **Staged Packages** tab.
-5. Check it: `npm view pickpen version`.
+**If something fails.** Before the tag, nothing is public: fix it and push again. A tag is never
+moved; a broken release is followed by a new version. A release that stopped after its tag is
+finished by running the workflow by hand on `main` (**Run workflow**, or
+`gh workflow run release.yml`).
 
-If a check fails, nothing has left the machine: fix it, amend or add a commit, and run the step
-again. A tag that was made but not pushed can be deleted with `git tag -d <tag>`. A pushed tag is
-never moved; a broken release is followed by a new version.
+**Trying it.** `make rehearse` runs the release checks on any branch. **Run workflow** with
+**rehearse** builds on any branch and publishes nothing.
 
-When `@pencere/sdk` has a new minor version, `^0.1.1` does not admit it: pickpen moves its range
-in a commit of its own, and the next release says so in its changelog.
+### What the checks refuse
 
-### What the release checks refuse
+- a version that is not after the last, or a `Cargo.toml` that disagrees with the changelog;
+- a non-empty `## [Unreleased]`, or an empty release section;
+- a commit whose gate is not green, a tag on another commit, or a release that is public already;
+- files that are not exactly the three executables of this version with correct sums and this
+  workflow's attestation; on its own machine, an executable that does not say it is this version.
 
-- a version that is not after the last, or a `package.json` that disagrees with the newest
-  changelog section;
-- an `## [Unreleased]` section that still holds changes, or an empty release section;
-- a branch other than `main`, a working tree that is not clean, a `main` that has diverged from
-  `origin/main`;
-- a tag that already exists, here or on `origin`;
-- a package without its `LICENSE`, `README.md`, `CHANGELOG.md`, server or view, or one that
-  carries its sources, tests or harness. The package is checked from `npm pack`, which builds it
-  first.
+## Settings the workflow relies on
 
-## The first release
-
-npm learns about a package from its first publish, and a trusted publisher can only be set up for
-a package that exists. Staging a package npm does not know would publish a public placeholder, so
-the workflow refuses to. The first release is therefore published from the maintainer's machine,
-with the same steps:
-
-1. The release commit, with the changelog's first section dated.
-2. `make release`.
-3. `make publish-local` runs `npm publish` (npm asks for the second factor, so run it in a
-   terminal), waits until npm lists the version, then pushes `main` and the tag. The workflow
-   sees that the version is already on npm, stages nothing, and writes the GitHub release.
-
-npm processes a new package for a few minutes before it lists it, so the push waits, up to 15
-minutes. If the workflow's `npm` job still finds nothing, it fails with "not on npm yet" and the
-GitHub release is not written: once `npm view pickpen version` answers, run what failed again
-(`gh run rerun <run-id> --failed`).
-
-Then, on npmjs.com, in the package's settings:
-
-- **Publishing access**, once the first release is out: require two-factor authentication and
-  disallow bypass tokens. It does not expire.
-- **Trusted publisher**, on the day of the second release, just before `make publish`: GitHub
-  Actions, organization `bateri`, repository `pickpen`, workflow `release.yml`, no environment,
-  with "Allow npm publish" and "Allow npm dist-tag" left off, so the workflow can only stage and
-  never make a version public by itself. npm stops a trusted publisher that has not published
-  within two days of being made, and one that has stopped cannot be edited: it is deleted and made
-  again. So it is made when a release is about to use it, not after the first.
-
-From then on a version becomes public only through the workflow and a maintainer's approval.
-
-## Who releases
-
-`make publish` and `make publish-local` publish pickpen under the project's name. Only a
-maintainer runs them. The approval on npm (`make approve`) is a second, separate decision.
-Everything before them (prepare, commit, tag) can be undone locally.
+GitHub → Settings → Environments → `release`: **Required reviewers**, and deployments from `main`
+only. There is no secret or token. The publishing job refuses to run if the environment has no
+reviewers, because GitHub would otherwise create it empty and publish without asking.

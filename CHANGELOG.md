@@ -26,3 +26,6 @@ change what the previous one did.
   `--title`.
 - Exit statuses that say what happened: 0 rows went out, 1 none did, 2 a person was needed and
   there was no terminal to ask in.
+- One native file for macOS on Apple silicon and Linux on arm64 and x86_64, installed with
+  `install.sh` and checked against the release's sums. The program holds the rows and the view asks
+  for the ones in sight, so up to a million rows filter, sort and scroll at once, over ssh too.

@@ -1,7 +1,7 @@
 // Writes the inputs of demo/: what `kubectl get pods`, `ps aux`, `git log --oneline`, a CSV
 // export and a JSON-lines access log look like, made up, and the list of pickpen's own sources
 // (for `--preview 'head {}'`), and the same on every run (a seeded
-// generator), so that the harness and the screenshots show the same rows.
+// generator), so that the tests and the screenshots show the same rows.
 //
 //   node tools/demo.mjs
 
@@ -222,14 +222,14 @@ const messages = [
 ];
 write("commits.txt", messages.map((m) => `${id(7, "0123456789abcdef")} ${m}`).join("\n") + "\n");
 
-// ---- find . -name '*.ts' -------------------------------------------------------------------
+// ---- find src -name '*.rs' -o -name '*.lua' ---------------------------------------------------
 
 const files = [];
 const walk = (path) => {
   for (const entry of readdirSync(new URL(path, root), { withFileTypes: true })) {
     const child = `${path}${entry.name}`;
     if (entry.isDirectory()) walk(`${child}/`);
-    else if (/\.(ts|tsx|css)$/.test(entry.name)) files.push(`./${child}`);
+    else if (/\.(rs|lua)$/.test(entry.name)) files.push(`./${child}`);
   }
 };
 walk("src/");
