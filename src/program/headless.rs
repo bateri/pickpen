@@ -41,7 +41,10 @@ struct Out {
 
 impl Out {
     fn write(&self, text: &str) {
-        let mut held = self.buffer.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut held = self
+            .buffer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         held.0.extend_from_slice(text.as_bytes());
         if held.0.len() >= 64 * 1024 {
             Self::flush_held(&mut held);
@@ -49,7 +52,10 @@ impl Out {
     }
 
     fn flush(&self) {
-        let mut held = self.buffer.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut held = self
+            .buffer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         Self::flush_held(&mut held);
     }
 
@@ -66,7 +72,10 @@ impl Out {
 
     /// A write that failed ends the program now: there is no one to write the rest to.
     fn failed(&self) -> Option<ExitCode> {
-        let held = self.buffer.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let held = self
+            .buffer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         held.1.as_ref().map(write_failed)
     }
 }
@@ -88,7 +97,11 @@ struct Headless<'a> {
 
 impl Headless<'_> {
     fn source(&self) -> Source<'_> {
-        Source { format: self.format, names: &self.names, heading: self.heading.as_deref() }
+        Source {
+            format: self.format,
+            names: &self.names,
+            heading: self.heading.as_deref(),
+        }
     }
 
     fn one_by_one(&self) -> bool {
@@ -123,7 +136,10 @@ impl Sink for Headless<'_> {
         {
             self.stop.get_or_insert((
                 64,
-                format!("there is no column named {} to sort by", serde_json::Value::from(sort.column.clone())),
+                format!(
+                    "there is no column named {} to sort by",
+                    serde_json::Value::from(sort.column.clone())
+                ),
             ));
         }
     }
@@ -132,7 +148,9 @@ impl Sink for Headless<'_> {
         if self.stop.is_some() {
             return;
         }
-        let query = self.query.get_or_insert_with(|| query::parse(&self.where_, &self.names));
+        let query = self
+            .query
+            .get_or_insert_with(|| query::parse(&self.where_, &self.names));
         if !query::matches(query, &record.cells, &query::lower_of(&record.cells)) {
             return;
         }
@@ -143,14 +161,19 @@ impl Sink for Headless<'_> {
         }
         if !self.headed {
             self.headed = true;
-            self.out.write(&output::head(&self.run.shape, &self.source()));
+            self.out
+                .write(&output::head(&self.run.shape, &self.source()));
         }
-        self.out.write(&output::one(&record, &self.run.shape, &self.source()));
+        self.out
+            .write(&output::one(&record, &self.run.shape, &self.source()));
     }
 
     fn problem(&mut self, text: String) {
         let mut chars = text.chars();
-        let first = chars.next().map(|c| c.to_lowercase().collect::<String>()).unwrap_or_default();
+        let first = chars
+            .next()
+            .map(|c| c.to_lowercase().collect::<String>())
+            .unwrap_or_default();
         say(&format!("{first}{}", chars.as_str()));
     }
 
@@ -162,7 +185,9 @@ impl Sink for Headless<'_> {
 }
 
 pub fn run(run: &Run, stream: Box<dyn Read + Send>) -> ExitCode {
-    let out = Arc::new(Out { buffer: Mutex::new((Vec::new(), None)) });
+    let out = Arc::new(Out {
+        buffer: Mutex::new((Vec::new(), None)),
+    });
     // Rows that wait in the buffer are handed on a moment later, so that `tail -f | pickpen --where`
     // writes each as it comes without a write for every row of a large input.
     let flusher = out.clone();
@@ -196,7 +221,10 @@ pub fn run(run: &Run, stream: Box<dyn Read + Send>) -> ExitCode {
     }
     if let Err(why) = read {
         let from = run.file.as_deref().unwrap_or("stdin");
-        return quit(66, &format!("cannot read {from}: {}", crate::args::os_words(&why)));
+        return quit(
+            66,
+            &format!("cannot read {from}: {}", crate::args::os_words(&why)),
+        );
     }
     if headless.format == Some(Format::Json) && headless.names.is_empty() {
         return quit(65, "the input could not be read");
@@ -210,7 +238,12 @@ pub fn run(run: &Run, stream: Box<dyn Read + Send>) -> ExitCode {
             // A stable sort keeps ties in the input's order, as the view does.
             let mut keyed: Vec<(query::SortKey, Record)> = held
                 .into_iter()
-                .map(|record| (query::sort_key(record.cells.get(column).map_or("", String::as_str)), record))
+                .map(|record| {
+                    (
+                        query::sort_key(record.cells.get(column).map_or("", String::as_str)),
+                        record,
+                    )
+                })
                 .collect();
             keyed.sort_by(|a, b| query::compare_ordered(&a.0, &b.0, sort.descending));
             held = keyed.into_iter().map(|(_, record)| record).collect();

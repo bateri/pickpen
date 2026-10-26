@@ -58,14 +58,15 @@ function run(args, input = "") {
 
 /**
  * Runs `pipeline` in a pane, `pickpen` in it standing for the program; the view makes the calls,
- * then `then` happens (by default the page asks to be closed, as the view does once it has sent).
+ * then `then` happens (by default nothing: the program closes its view once it has its answer).
  * stdout of pickpen goes to `out`, its status to `status`.
  */
-function pane(pipeline, calls, then = ["--then", "page-close"]) {
+function pane(pipeline, calls, then = []) {
   const args = ["--size", "100x30", "--limit", "25"];
   for (const [name, input] of calls) args.push("--call", `${name}=${JSON.stringify(input)}`);
   const script = `${pipeline.replace("pickpen", q(BIN))} > "${dir}/out" 2> "${dir}/err"; echo $? > "${dir}/status"`;
-  const ran = spawnSync(HOST, [...args, ...then, "--", "sh", "-c", script], {
+  // bash, which waits out a ⌃C its command handles and goes on (dash would end with it).
+  const ran = spawnSync(HOST, [...args, ...then, "--", "bash", "-c", script], {
     encoding: "utf8",
     timeout: 40_000,
     env: { ...process.env, PENCERE_FAKE_GIST: "100000" },
@@ -179,7 +180,10 @@ test("the rows chosen in the pane go out on stdout, in the order sent", () => {
 });
 
 test("the view is told the command line, and the rows so far", () => {
-  const { log } = pane(`pickpen --query web --title Pods ${q(`${DEMO}pods.txt`)}`, [["boot", {}]]);
+  const { log } = pane(`pickpen --query web --title Pods ${q(`${DEMO}pods.txt`)}`, [
+    ["boot", {}],
+    ["cancel", {}],
+  ]);
   const [boot] = results(log);
   assert.equal(boot.query, "web");
   assert.equal(boot.title, "Pods");
@@ -219,8 +223,9 @@ test("the output panel shows what goes out, and the command line that does it ag
     ["query", { query: "STATUS=Error" }],
     ["mark_shown", { on: true }],
     ["output", {}],
+    ["cancel", {}],
   ]);
-  const output = results(log).at(-1);
+  const output = results(log).at(-2);
   assert.equal(output.again.kind, "same");
   assert.equal(output.again.line, "pickpen --where STATUS=Error --field NAME");
   assert.equal(output.text.split("\n").length - 1, output.count);
@@ -231,8 +236,9 @@ test("a row's place among those shown comes back as the cursor's, after the orde
     ["boot", {}],
     ["order", { column: 0, descending: false }],
     ["window", { from: 0, count: 10, cursor: 0 }],
+    ["cancel", {}],
   ]);
-  const window = results(log).at(-1);
+  const window = results(log).at(-2);
   assert.deepEqual(
     window.rows.map((r) => r.cells[0]),
     ["a", "b", "c"],
@@ -244,14 +250,18 @@ test("a preview runs with no terminal and no stdin", () => {
   const { log } = pane(`printf 'one\\n' | pickpen --preview 'echo {}; tty; cat'`, [
     ["boot", {}],
     ["preview", { id: 0, width: 40 }],
+    ["cancel", {}],
   ]);
-  const preview = results(log).at(-1);
+  const preview = results(log).at(-2);
   assert.match(preview.text, /^one\nnot a tty\n/);
-  assert.equal(preview.status, 1);
+  assert.equal(preview.status, 0);
 });
 
 test("Send nothing writes nothing and ends with 1", () => {
-  const { out, status, err } = pane("printf 'a\\nb\\n' | pickpen", [["boot", {}]]);
+  const { out, status, err } = pane("printf 'a\\nb\\n' | pickpen", [
+    ["boot", {}],
+    ["cancel", {}],
+  ]);
   assert.equal(out, "");
   assert.equal(status, 1);
   assert.match(err, /nothing was chosen/);

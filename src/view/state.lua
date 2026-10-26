@@ -581,7 +581,13 @@ function A.cancel()
 		return
 	end
 	S.sending = true
-	S.out.close = true
+	S.overlay = nil
+	ask("cancel", {}, function()
+		S.out.close = true
+	end, function()
+		-- A program that cannot be told is left by closing the view: that sends nothing too.
+		S.out.close = true
+	end)
 end
 
 -- Esc, one step at a time toward sending nothing: what is open, then the query, then nothing.

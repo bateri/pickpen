@@ -5,10 +5,26 @@
 use pencere::{Icon, IconTheme};
 
 const ICONS: [(&[u8], &str, IconTheme); 4] = [
-    (include_bytes!("../assets/icon-32-dark.png"), "32x32", IconTheme::Dark),
-    (include_bytes!("../assets/icon-64-dark.png"), "64x64", IconTheme::Dark),
-    (include_bytes!("../assets/icon-32-light.png"), "32x32", IconTheme::Light),
-    (include_bytes!("../assets/icon-64-light.png"), "64x64", IconTheme::Light),
+    (
+        include_bytes!("../assets/icon-32-dark.png"),
+        "32x32",
+        IconTheme::Dark,
+    ),
+    (
+        include_bytes!("../assets/icon-64-dark.png"),
+        "64x64",
+        IconTheme::Dark,
+    ),
+    (
+        include_bytes!("../assets/icon-32-light.png"),
+        "32x32",
+        IconTheme::Light,
+    ),
+    (
+        include_bytes!("../assets/icon-64-light.png"),
+        "64x64",
+        IconTheme::Light,
+    ),
 ];
 
 pub fn icons() -> Vec<Icon> {
@@ -28,7 +44,11 @@ fn base64(bytes: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
-        let b = [chunk[0], chunk.get(1).copied().unwrap_or(0), chunk.get(2).copied().unwrap_or(0)];
+        let b = [
+            chunk[0],
+            chunk.get(1).copied().unwrap_or(0),
+            chunk.get(2).copied().unwrap_or(0),
+        ];
         let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
         for (i, shift) in [18, 12, 6, 0].into_iter().enumerate() {
             if i <= chunk.len() {

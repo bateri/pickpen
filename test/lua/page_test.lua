@@ -272,8 +272,8 @@ t.test("Esc clears the query, then asks before dropping marks, then sends nothin
 	reply = key(k, "escape")
 	t.ok(not reply.close, "a first Esc with rows marked asks")
 	t.has(texts(k), "Esc again to send nothing")
-	reply = key(k, "escape")
-	t.ok(reply.close, "a second Esc closes the view")
+	key(k, "escape")
+	t.ok(k:last_call("cancel") ~= nil, "a second Esc sends nothing")
 end)
 
 t.test("the arrows move the cursor, and Enter sends the row it is on", function()

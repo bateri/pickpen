@@ -25,7 +25,7 @@ use std::io::{self, IsTerminal, Read, Write};
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use pencere::{EndedBy, Options, Outcome, Terminal};
+use pencere::{EndedBy, Options, Outcome, Terminal, ViewControl};
 
 use crate::args::{Parsed, Run};
 use crate::input::{Format, Record, Sink};
@@ -51,14 +51,20 @@ fn input_of(run: &Run) -> Result<Box<dyn Read + Send>, ExitCode> {
         None => {
             // A person who typed `pickpen` alone would wait on a read nobody feeds.
             if io::stdin().is_terminal() {
-                return Err(quit(64, "give rows on stdin or name a FILE (pickpen --help says how it is used)"));
+                return Err(quit(
+                    64,
+                    "give rows on stdin or name a FILE (pickpen --help says how it is used)",
+                ));
             }
             Ok(Box::new(io::stdin()))
         }
         // Opened now, so that a file that cannot be read is said before any view opens.
         Some(path) => match File::open(path) {
             Ok(file) => Ok(Box::new(file)),
-            Err(why) => Err(quit(66, &format!("cannot read {path}: {}", args::os_words(&why)))),
+            Err(why) => Err(quit(
+                66,
+                &format!("cannot read {path}: {}", args::os_words(&why)),
+            )),
         },
     }
 }
@@ -100,14 +106,23 @@ impl Sink for Feed {
 
 /// A person chooses in the pane.
 fn choose(run: Run, stream: Box<dyn Read + Send>) -> ExitCode {
-    let rule = if run.confirm { run.where_.as_deref() } else { None };
+    let rule = if run.confirm {
+        run.where_.as_deref()
+    } else {
+        None
+    };
     let shared = Shared::new(Picker::new(&run.query, rule));
     let feed = shared.clone();
     let given = run.input;
     std::thread::spawn(move || {
-        let mut sink = Feed { shared: feed.clone() };
+        let mut sink = Feed {
+            shared: feed.clone(),
+        };
         if let Err(why) = input::read(stream, given, &mut sink) {
-            sink.problem(format!("The input could not be read: {}", args::os_words(&why)));
+            sink.problem(format!(
+                "The input could not be read: {}",
+                args::os_words(&why)
+            ));
             sink.finish();
         }
     });
@@ -117,6 +132,7 @@ fn choose(run: Run, stream: Box<dyn Read + Send>) -> ExitCode {
         Err(_) => return no_view(),
     };
     let run = Arc::new(run);
+    let control = ViewControl::new();
     let mut options = Options::new()
         .app(pencere::app!())
         .program("pickpen")
@@ -127,28 +143,55 @@ fn choose(run: Run, stream: Box<dyn Read + Send>) -> ExitCode {
     for icon in icons::icons() {
         options = options.icon(icon);
     }
-    let options = served::serve(options, &shared, &run, VERSION);
+    let options = served::serve(
+        options.control(control.clone()),
+        &shared,
+        &run,
+        &control,
+        VERSION,
+    );
     let outcome = pencere::serve(options);
-    let answer = shared.answer.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
+    let answer = shared
+        .answer
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take();
     if let Some((rows, shape)) = answer {
         let picker = shared.lock();
-        let records: Vec<&Record> = rows.iter().map(|&id| &picker.records[id as usize]).collect();
+        let records: Vec<&Record> = rows
+            .iter()
+            .map(|&id| &picker.records[id as usize])
+            .collect();
         let text = output::render(&records, &shape, &picker.source());
         return headless::write_all(text.as_bytes(), 0);
     }
+    if *shared
+        .cancelled
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+    {
+        return quit(1, "nothing was chosen");
+    }
     match outcome {
         Err(why) => quit(1, &format!("the view could not be shown: {why}")),
-        Ok(Outcome::NoView(no_view)) if matches!(no_view.reason, pencere::NoViewReason::Interrupted(_)) => {
+        Ok(Outcome::NoView(no_view))
+            if matches!(no_view.reason, pencere::NoViewReason::Interrupted(_)) =>
+        {
             ExitCode::from(130)
         }
         Ok(Outcome::NoView(_)) => self::no_view(),
-        Ok(Outcome::Closed(closed)) if matches!(closed.by, EndedBy::Signal(_)) => ExitCode::from(130),
+        Ok(Outcome::Closed(closed)) if matches!(closed.by, EndedBy::Signal(_)) => {
+            ExitCode::from(130)
+        }
         Ok(Outcome::Closed(_)) => quit(1, "nothing was chosen"),
     }
 }
 
 fn no_view() -> ExitCode {
-    quit(2, "choosing rows needs a terminal that shows pencere views; --where QUERY alone runs without one")
+    quit(
+        2,
+        "choosing rows needs a terminal that shows pencere views; --where QUERY alone runs without one",
+    )
 }
 
 fn main() -> ExitCode {
@@ -163,7 +206,12 @@ fn main() -> ExitCode {
             return ExitCode::SUCCESS;
         }
         Ok(Parsed::Run(run)) => run,
-        Err(message) => return quit(64, &format!("{message} (pickpen --help says how it is used)")),
+        Err(message) => {
+            return quit(
+                64,
+                &format!("{message} (pickpen --help says how it is used)"),
+            );
+        }
     };
     let stream = match input_of(&run) {
         Ok(stream) => stream,

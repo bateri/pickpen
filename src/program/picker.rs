@@ -162,8 +162,12 @@ impl Picker {
         }
         let id = self.records.len();
         let lower = query::lower_of(&record.cells);
-        let rule_marks = self.rule.as_ref().is_some_and(|rule| query::matches(rule, &record.cells, &lower));
-        let matches = self.query.terms.is_empty() || query::matches(&self.query, &record.cells, &lower);
+        let rule_marks = self
+            .rule
+            .as_ref()
+            .is_some_and(|rule| query::matches(rule, &record.cells, &lower));
+        let matches =
+            self.query.terms.is_empty() || query::matches(&self.query, &record.cells, &lower);
         self.records.push(record);
         self.lower.push(lower);
         self.marked.push(false);
@@ -204,7 +208,12 @@ impl Picker {
     fn read_columns(&mut self) {
         let rows = &self.records[..self.records.len().min(KIND_ROWS)];
         self.kinds = (0..self.names.len())
-            .map(|column| values::column_kind(rows.iter().map(|r| r.cells.get(column).map_or("", String::as_str))))
+            .map(|column| {
+                values::column_kind(
+                    rows.iter()
+                        .map(|r| r.cells.get(column).map_or("", String::as_str)),
+                )
+            })
             .collect();
         let widths_of = &self.records[..self.records.len().min(WIDTH_ROWS)];
         self.widths = self
@@ -229,7 +238,10 @@ impl Picker {
             return "Type to filter: words, !word to leave out — F1 for more".to_owned();
         }
         let simple_name = |name: &str| {
-            !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '%' || c == '-')
+            !name.is_empty()
+                && name
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '_' || c == '%' || c == '-')
         };
         let simple_value = |value: &str| {
             let mut chars = value.chars();
@@ -265,18 +277,19 @@ impl Picker {
             if counts.len() < 2 || !simple_value(value) {
                 continue;
             }
-            if fewest.as_ref().is_none_or(|(_, _, distinct)| counts.len() < *distinct) {
+            if fewest
+                .as_ref()
+                .is_none_or(|(_, _, distinct)| counts.len() < *distinct)
+            {
                 fewest = Some((name, value.to_owned(), counts.len()));
             }
         }
         if let Some((name, value, _)) = fewest {
             examples.push(format!("{name}={value}"));
         }
-        let quantity_column = self
-            .names
-            .iter()
-            .enumerate()
-            .find(|(column, name)| self.kinds.get(*column).copied().flatten().is_some() && simple_name(name));
+        let quantity_column = self.names.iter().enumerate().find(|(column, name)| {
+            self.kinds.get(*column).copied().flatten().is_some() && simple_name(name)
+        });
         if let Some((column, name)) = quantity_column {
             let bound = match self.kinds.get(column).copied().flatten() {
                 Some(Kind::Duration) => "<1h",
@@ -300,7 +313,9 @@ impl Picker {
     fn keys_of(&mut self, column: usize) -> &Vec<SortKey> {
         let keys = self.sort_keys.entry(column).or_default();
         for record in &self.records[keys.len()..] {
-            keys.push(query::sort_key(record.cells.get(column).map_or("", String::as_str)));
+            keys.push(query::sort_key(
+                record.cells.get(column).map_or("", String::as_str),
+            ));
         }
         keys
     }
@@ -313,7 +328,8 @@ impl Picker {
         }
         let keys = self.keys_of(order.column);
         ids.sort_by(|&a, &b| {
-            query::compare_ordered(&keys[a as usize], &keys[b as usize], order.descending).then(a.cmp(&b))
+            query::compare_ordered(&keys[a as usize], &keys[b as usize], order.descending)
+                .then(a.cmp(&b))
         });
     }
 
@@ -383,13 +399,11 @@ impl Picker {
 
     // ---- marks ----------------------------------------------------------------------------------------------
 
-    pub fn is_marked(&self, id: usize) -> bool {
-        self.marked.get(id).copied().unwrap_or(false)
-    }
-
     pub fn set_marked(&mut self, ids: impl IntoIterator<Item = usize>, on: bool) {
         for id in ids {
-            let Some(mark) = self.marked.get_mut(id) else { continue };
+            let Some(mark) = self.marked.get_mut(id) else {
+                continue;
+            };
             if *mark == on {
                 continue;
             }
@@ -414,9 +428,14 @@ impl Picker {
     /// Every row from one to the other, in the order shown, takes the mark.
     pub fn mark_range(&mut self, from: usize, to: usize, on: bool) {
         let at = |id: usize| self.place.get(id).copied().filter(|&p| p != u32::MAX);
-        let (Some(a), Some(b)) = (at(from).or(at(to)), at(to)) else { return };
+        let (Some(a), Some(b)) = (at(from).or(at(to)), at(to)) else {
+            return;
+        };
         let (low, high) = (a.min(b) as usize, a.max(b) as usize);
-        let ids: Vec<usize> = self.shown[low..=high].iter().map(|&id| id as usize).collect();
+        let ids: Vec<usize> = self.shown[low..=high]
+            .iter()
+            .map(|&id| id as usize)
+            .collect();
         self.set_marked(ids, on);
     }
 
@@ -434,17 +453,30 @@ impl Picker {
     }
 
     pub fn invert(&mut self) {
-        let (on, off): (Vec<usize>, Vec<usize>) =
-            self.shown.iter().map(|&id| id as usize).partition(|&id| !self.marked[id]);
+        let (on, off): (Vec<usize>, Vec<usize>) = self
+            .shown
+            .iter()
+            .map(|&id| id as usize)
+            .partition(|&id| !self.marked[id]);
         self.set_marked(on, true);
         self.set_marked(off, false);
     }
 
     /// The rows whose column is this value: of every row, or of the rows the column panel counts.
     pub fn rows_with(&self, column: usize, value: &str, facet: bool) -> Vec<usize> {
-        let ids = if facet { self.facet_rows(column) } else { (0..self.records.len()).collect() };
+        let ids = if facet {
+            self.facet_rows(column)
+        } else {
+            (0..self.records.len()).collect()
+        };
         ids.into_iter()
-            .filter(|&id| self.records[id].cells.get(column).map_or("", String::as_str) == value)
+            .filter(|&id| {
+                self.records[id]
+                    .cells
+                    .get(column)
+                    .map_or("", String::as_str)
+                    == value
+            })
             .collect()
     }
 
@@ -452,23 +484,23 @@ impl Picker {
 
     /// The marked rows, in the order they go out: the order shown, ties in the input's.
     pub fn marked_ids(&mut self) -> Vec<u32> {
-        let mut ids: Vec<u32> =
-            (0..self.marked.len()).filter(|&id| self.marked[id]).map(|id| id as u32).collect();
+        let mut ids: Vec<u32> = (0..self.marked.len())
+            .filter(|&id| self.marked[id])
+            .map(|id| id as u32)
+            .collect();
         self.sort_ids(&mut ids);
         ids
     }
 
     /// The rows the rule of `--confirm` matches, every one.
     fn rule_ids(&self) -> Vec<u32> {
-        let Some(rule) = &self.rule else { return Vec::new() };
+        let Some(rule) = &self.rule else {
+            return Vec::new();
+        };
         (0..self.records.len())
             .filter(|&at| query::matches(rule, &self.records[at].cells, &self.lower[at]))
             .map(|at| at as u32)
             .collect()
-    }
-
-    pub fn rule_text(&self) -> Option<&str> {
-        self.rule_text.as_deref()
     }
 
     /// Whether the marked rows are exactly these.
@@ -582,7 +614,10 @@ impl Picker {
     pub fn facet_rows(&self, column: usize) -> Vec<usize> {
         let rest = self.query.without_column(column);
         (0..self.records.len())
-            .filter(|&at| rest.terms.is_empty() || query::matches(&rest, &self.records[at].cells, &self.lower[at]))
+            .filter(|&at| {
+                rest.terms.is_empty()
+                    || query::matches(&rest, &self.records[at].cells, &self.lower[at])
+            })
             .collect()
     }
 
@@ -595,7 +630,14 @@ impl Picker {
         // Counted in the order values first come, then by count: ties as a Map's sort leaves them.
         let mut counts: HashMap<&str, usize> = HashMap::new();
         for &id in &ids {
-            *counts.entry(self.records[id].cells.get(column).map_or("", String::as_str)).or_default() += 1;
+            *counts
+                .entry(
+                    self.records[id]
+                        .cells
+                        .get(column)
+                        .map_or("", String::as_str),
+                )
+                .or_default() += 1;
         }
         let distinct = counts.len();
         let mut values: Vec<(&str, usize)> = counts.into_iter().collect();
@@ -607,7 +649,13 @@ impl Picker {
             .terms
             .iter()
             .find_map(|term| match term {
-                Term::Field { column: c, op, values, range: None, .. } if *c == column && op.as_str() == "=" => {
+                Term::Field {
+                    column: c,
+                    op,
+                    values,
+                    range: None,
+                    ..
+                } if *c == column && op.as_str() == "=" => {
                     Some(values.iter().map(|v| v.to_lowercase()).collect())
                 }
                 _ => None,
@@ -641,7 +689,14 @@ impl Picker {
     fn chart(&mut self, column: usize, kind: Kind, ids: &[usize]) -> Value {
         let mut numbers: Vec<f64> = ids
             .iter()
-            .filter_map(|&id| quantity(self.records[id].cells.get(column).map_or("", String::as_str)))
+            .filter_map(|&id| {
+                quantity(
+                    self.records[id]
+                        .cells
+                        .get(column)
+                        .map_or("", String::as_str),
+                )
+            })
             .filter(|q| q.kind == kind || q.kind == Kind::Number)
             .map(|q| q.value)
             .collect();
@@ -655,7 +710,12 @@ impl Picker {
         // milliseconds, a few seconds): then the chart is in logarithms, so that the many small
         // values are not one bar and the few large ones are still seen.
         let log = min > 0.0 && max / min >= 100.0;
-        let mut scale = Scale { kind, low: 0.0, span: 1.0, log };
+        let mut scale = Scale {
+            kind,
+            low: 0.0,
+            span: 1.0,
+            log,
+        };
         scale.low = scale.scale(min);
         let span = scale.scale(max) - scale.low;
         scale.span = if span == 0.0 { 1.0 } else { span };
@@ -667,7 +727,11 @@ impl Picker {
         self.scales.insert(column, scale);
         // Where the range of a term on this column is across the chart.
         let range = self.query.terms.iter().find_map(|term| match term {
-            Term::Field { column: c, range: Some((low, high)), .. } if *c == column => {
+            Term::Field {
+                column: c,
+                range: Some((low, high)),
+                ..
+            } if *c == column => {
                 let (low, high) = (quantity(low)?, quantity(high)?);
                 Some(json!([scale.place(low.value), scale.place(high.value)]))
             }

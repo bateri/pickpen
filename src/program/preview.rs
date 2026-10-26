@@ -91,8 +91,14 @@ pub fn run(command: &str, width: u32, cancelled: &dyn Fn() -> bool) -> Preview {
     let (tx, rx) = mpsc::channel::<Vec<u8>>();
     let mut readers = Vec::new();
     for stream in [
-        child.stdout.take().map(|s| Box::new(s) as Box<dyn Read + Send>),
-        child.stderr.take().map(|s| Box::new(s) as Box<dyn Read + Send>),
+        child
+            .stdout
+            .take()
+            .map(|s| Box::new(s) as Box<dyn Read + Send>),
+        child
+            .stderr
+            .take()
+            .map(|s| Box::new(s) as Box<dyn Read + Send>),
     ]
     .into_iter()
     .flatten()
@@ -190,7 +196,9 @@ mod tests {
     #[test]
     fn a_preview_the_view_gave_up_is_killed() {
         let started = Instant::now();
-        let preview = run("sleep 5", 80, &|| started.elapsed() > Duration::from_millis(100));
+        let preview = run("sleep 5", 80, &|| {
+            started.elapsed() > Duration::from_millis(100)
+        });
         assert!(started.elapsed() < Duration::from_secs(3));
         assert_eq!(preview.status, None);
     }

@@ -15,7 +15,7 @@
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use pencere::{Call, Options, Subscription, ViewError};
+use pencere::{Call, CloseResult, Options, Subscription, ViewControl, ViewError};
 use serde_json::{Value, json};
 
 use crate::args::Run;
@@ -32,6 +32,8 @@ const FIRST_ROWS: Duration = Duration::from_millis(300);
 /// into their places.
 const TICK: Duration = Duration::from_millis(50);
 const RESORT_AFTER: Duration = Duration::from_millis(250);
+/// How long the answer to `choose` or `cancel` has to reach the view before the program closes it.
+const CLOSE_AFTER: Duration = Duration::from_millis(50);
 /// The most rows the output panel draws.
 const OUTPUT_ROWS: usize = 200;
 
@@ -41,15 +43,24 @@ pub struct Shared {
     pub changed: Condvar,
     /// The rows the person chose and their shape, once they have.
     pub answer: Mutex<Option<(Vec<u32>, Shape)>>,
+    /// The person sent nothing.
+    pub cancelled: Mutex<bool>,
 }
 
 impl Shared {
     pub fn new(picker: Picker) -> Arc<Self> {
-        Arc::new(Self { picker: Mutex::new(picker), changed: Condvar::new(), answer: Mutex::new(None) })
+        Arc::new(Self {
+            picker: Mutex::new(picker),
+            changed: Condvar::new(),
+            answer: Mutex::new(None),
+            cancelled: Mutex::new(false),
+        })
     }
 
     pub fn lock(&self) -> MutexGuard<'_, Picker> {
-        self.picker.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.picker
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Something changed: the topic tells the view.
@@ -71,11 +82,22 @@ fn column_of(params: &Value, picker: &Picker) -> Result<usize, ViewError> {
 }
 
 fn ids_of(params: &Value, key: &str) -> Vec<usize> {
-    params[key].as_array().map_or_else(Vec::new, |ids| ids.iter().filter_map(Value::as_u64).map(|id| id as usize).collect())
+    params[key].as_array().map_or_else(Vec::new, |ids| {
+        ids.iter()
+            .filter_map(Value::as_u64)
+            .map(|id| id as usize)
+            .collect()
+    })
 }
 
 fn fields_of(params: &Value) -> Option<Vec<String>> {
-    params["fields"].as_array().map(|fields| fields.iter().filter_map(Value::as_str).map(str::to_owned).collect())
+    params["fields"].as_array().map(|fields| {
+        fields
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect()
+    })
 }
 
 /// The shape of the output: the columns the person picked in the view, or the command line's.
@@ -101,14 +123,19 @@ fn to_send(picker: &mut Picker, run: &Run, cursor: Option<usize>) -> Vec<u32> {
 /// does when the rows marked are exactly the rows a query matches — the query typed, or, with
 /// `--confirm`, the rule the rows were marked by.
 fn again(picker: &Picker, run: &Run, fields: Option<&[String]>) -> Value {
-    let field = fields.map(<[String]>::to_vec).or_else(|| run.given.field.clone());
+    let field = fields
+        .map(<[String]>::to_vec)
+        .or_else(|| run.given.field.clone());
     let line_for = |where_: &str| {
         command_line(&Recipe {
             input: run.given.input.clone(),
             where_: where_.to_owned(),
-            sort: picker
-                .order
-                .map(|o| (picker.names.get(o.column).cloned().unwrap_or_default(), o.descending)),
+            sort: picker.order.map(|o| {
+                (
+                    picker.names.get(o.column).cloned().unwrap_or_default(),
+                    o.descending,
+                )
+            }),
             field: field.clone().filter(|f| !f.is_empty()),
             format: run.given.format.clone(),
             output: run.given.output.clone(),
@@ -116,7 +143,11 @@ fn again(picker: &Picker, run: &Run, fields: Option<&[String]>) -> Value {
     };
     let candidates = picker.again_candidates();
     // The query typed says what is meant once there is one; until then, the rule does.
-    let main = if picker.query_text.trim().is_empty() && candidates.len() > 1 { &candidates[1] } else { &candidates[0] };
+    let main = if picker.query_text.trim().is_empty() && candidates.len() > 1 {
+        &candidates[1]
+    } else {
+        &candidates[0]
+    };
     if picker.marked_count == 0 {
         return json!({ "kind": "none", "line": line_for(&main.0), "where": main.0 });
     }
@@ -139,8 +170,28 @@ fn shown_now(picker: &Picker) -> Value {
     sum
 }
 
-/// The view's calls and its topic, on `options`.
-pub fn serve(options: Options, shared: &Arc<Shared>, run: &Arc<Run>, version: &'static str) -> Options {
+/// After the answer has gone back to the view: the program closes its view, and goes on to write.
+/// The view closes itself too once it has its answer, for a terminal that cannot close it for the
+/// program; whichever comes first does, and the other finds nothing to close.
+fn close_soon(control: &ViewControl) {
+    let control = control.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(CLOSE_AFTER);
+        // A terminal that cannot (`Unsupported`) has the view close itself; nothing is printed
+        // while the view has the terminal.
+        let _: CloseResult = control.close();
+    });
+}
+
+/// The view's calls and its topic, on `options`; `control` closes the view once the person has
+/// answered.
+pub fn serve(
+    options: Options,
+    shared: &Arc<Shared>,
+    run: &Arc<Run>,
+    control: &ViewControl,
+    version: &'static str,
+) -> Options {
     let s = shared.clone();
     let r = run.clone();
     let options = options.call("boot", move |_params, _call: &Call| {
@@ -149,7 +200,10 @@ pub fn serve(options: Options, shared: &Arc<Shared>, run: &Arc<Run>, version: &'
         let mut picker = s.lock();
         while !picker.done && !picker.capped && Instant::now() < deadline {
             let left = deadline.saturating_duration_since(Instant::now());
-            picker = s.changed.wait_timeout(picker, left).map_or_else(|e| e.into_inner().0, |r| r.0);
+            picker = s
+                .changed
+                .wait_timeout(picker, left)
+                .map_or_else(|e| e.into_inner().0, |r| r.0);
         }
         let mut boot = json!({
             "version": version,
@@ -168,12 +222,17 @@ pub fn serve(options: Options, shared: &Arc<Shared>, run: &Arc<Run>, version: &'
         if let Some(sort) = &r.sort {
             match query::column_named(&picker.names, &sort.column) {
                 Some(column) => {
-                    picker.set_order(Some(Order { column, descending: sort.descending }));
+                    picker.set_order(Some(Order {
+                        column,
+                        descending: sort.descending,
+                    }));
                     boot["order"] = json!({ "column": column, "descending": sort.descending });
                 }
                 None => {
-                    boot["sort_problem"] =
-                        json!(format!("There is no column named {} to sort by", json!(sort.column)));
+                    boot["sort_problem"] = json!(format!(
+                        "There is no column named {} to sort by",
+                        json!(sort.column)
+                    ));
                 }
             }
         }
@@ -190,8 +249,14 @@ pub fn serve(options: Options, shared: &Arc<Shared>, run: &Arc<Run>, version: &'
             loop {
                 let summary = {
                     let mut picker = s.lock();
-                    picker = s.changed.wait_timeout(picker, TICK).map_or_else(|e| e.into_inner().0, |r| r.0);
-                    if picker.resort_due.is_some_and(|due| due.elapsed() >= RESORT_AFTER) {
+                    picker = s
+                        .changed
+                        .wait_timeout(picker, TICK)
+                        .map_or_else(|e| e.into_inner().0, |r| r.0);
+                    if picker
+                        .resort_due
+                        .is_some_and(|due| due.elapsed() >= RESORT_AFTER)
+                    {
                         picker.refilter();
                     }
                     if picker.version == told {
@@ -260,12 +325,20 @@ pub fn serve(options: Options, shared: &Arc<Shared>, run: &Arc<Run>, version: &'
         } else if let Some(value) = params["value"].as_str() {
             Some(picker.term_for(column, value, negate))
         } else if let Some(values) = params["values"].as_array() {
-            let values: Vec<String> = values.iter().filter_map(Value::as_str).map(query::quote_value).collect();
+            let values: Vec<String> = values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(query::quote_value)
+                .collect();
             Some(format!("{name}={}", values.join("|")))
         } else if let Some(range) = params["range"].as_array() {
             let low = range.first().and_then(Value::as_f64).unwrap_or(0.0);
             let high = range.get(1).and_then(Value::as_f64).unwrap_or(1.0);
-            Some(picker.range_term(column, low, high).ok_or_else(|| bad("The column has no chart"))?)
+            Some(
+                picker
+                    .range_term(column, low, high)
+                    .ok_or_else(|| bad("The column has no chart"))?,
+            )
         } else {
             None
         };
@@ -296,7 +369,11 @@ pub fn serve(options: Options, shared: &Arc<Shared>, run: &Arc<Run>, version: &'
         let (Some(from), Some(to)) = (params["from"].as_u64(), params["to"].as_u64()) else {
             return Err(bad("A run of rows is from a row to a row"));
         };
-        picker.mark_range(from as usize, to as usize, params["on"].as_bool().unwrap_or(true));
+        picker.mark_range(
+            from as usize,
+            to as usize,
+            params["on"].as_bool().unwrap_or(true),
+        );
         Ok(picker.summary())
     });
 
@@ -362,8 +439,11 @@ pub fn serve(options: Options, shared: &Arc<Shared>, run: &Arc<Run>, version: &'
         match output::problem_of(&shape, &picker.names) {
             Some(problem) => out["error"] = json!(problem),
             None => {
-                let records: Vec<_> =
-                    rows.iter().take(OUTPUT_ROWS).map(|&id| &picker.records[id as usize]).collect();
+                let records: Vec<_> = rows
+                    .iter()
+                    .take(OUTPUT_ROWS)
+                    .map(|&id| &picker.records[id as usize])
+                    .collect();
                 out["text"] = json!(output::render(&records, &shape, &picker.source()));
             }
         }
@@ -378,7 +458,11 @@ pub fn serve(options: Options, shared: &Arc<Shared>, run: &Arc<Run>, version: &'
             .and_then(|id| picker.records.get(id as usize))
             .ok_or_else(|| bad("There is no such row"))?;
         let text = match params["column"].as_u64() {
-            Some(column) => record.cells.get(column as usize).cloned().unwrap_or_default(),
+            Some(column) => record
+                .cells
+                .get(column as usize)
+                .cloned()
+                .unwrap_or_default(),
             None => record.cells.join("\t"),
         };
         Ok(json!({ "text": text }))
@@ -410,7 +494,18 @@ pub fn serve(options: Options, shared: &Arc<Shared>, run: &Arc<Run>, version: &'
     };
 
     let s = shared.clone();
+    let c = control.clone();
+    let options = options.call("cancel", move |_params, _call: &Call| {
+        *s.cancelled
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = true;
+        close_soon(&c);
+        Ok(json!({}))
+    });
+
+    let s = shared.clone();
     let r = run.clone();
+    let c = control.clone();
     options.call("choose", move |params, _call: &Call| {
         let mut picker = s.lock();
         let fields = fields_of(&params);
@@ -432,7 +527,10 @@ pub fn serve(options: Options, shared: &Arc<Shared>, run: &Arc<Run>, version: &'
             return Err(ViewError::with_message("nothing", "No row was chosen"));
         }
         let count = rows.len();
-        *s.answer.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some((rows, shape));
+        *s.answer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some((rows, shape));
+        close_soon(&c);
         Ok(json!({ "sent": count }))
     })
 }
