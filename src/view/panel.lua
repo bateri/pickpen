@@ -489,23 +489,23 @@ function P.view(narrow)
 		body = output_tab(width)
 	end
 	aside:child(body)
-	local outer = b.div():row():no_shrink():min_h(0)
 	if narrow then
 		return aside
 	end
-	-- The line between the rows and the panel, which the pointer drags: wider to it than it is drawn.
-	outer:child(
+	-- The line between the rows and the panel, which the pointer drags: seven points wide to the
+	-- pointer, three of them over the rows, and a point wide to the eye. It is laid over the panel's
+	-- edge rather than between the two with negative margins, which the engine counts against the
+	-- room the rows have.
+	return aside:child(
 		b.div()
 			:press("pedge")
+			:absolute()
+			:inset(0, nil, 0, -3)
 			:w(7)
-			:ml(-3)
-			:mr(-3)
-			:no_shrink()
 			:row()
 			:justify_center()
 			:child(b.div():w(1):h_full():bg(L.ui.pressed == "pedge" and alpha("accent", 0.6) or L.line))
 	)
-	return outer:child(aside)
 end
 
 return P
