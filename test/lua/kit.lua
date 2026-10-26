@@ -127,6 +127,13 @@ function M.start(prelude_dir, page_path)
 		path_of = function()
 			return {}
 		end,
+		-- Nothing on the stand-in's page can be dragged, or have something dropped on it.
+		drag_source = function()
+			return nil
+		end,
+		drop_target = function()
+			return nil
+		end,
 	}
 	pencere = globals
 	for _, name in ipairs(PARTS) do

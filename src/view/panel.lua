@@ -121,7 +121,7 @@ local function row_tab(width)
 		return preview_tab(width)
 	end
 	local row = A.row(S.cursor)
-	local list = b.div():id("panel"):col():grow(1):min_h(0):py(6):scroll_y(L.ui:scroll_offset("panel"))
+	local list = b.div():id("panel"):col():w(width):grow(1):min_h(0):py(6):scroll_y(L.ui:scroll_offset("panel"))
 	if row == nil then
 		return list
 	end
@@ -274,7 +274,7 @@ local function column_tab(width)
 	local facet = S.facet
 	local columns = S.sum.columns
 	local column = math.clamp(S.column, 1, math.max(#columns, 1))
-	local list = b.div():id("panel"):col():grow(1):min_h(0):py(8):scroll_y(L.ui:scroll_offset("panel"))
+	local list = b.div():id("panel"):col():w(width):grow(1):min_h(0):py(8):scroll_y(L.ui:scroll_offset("panel"))
 	if #columns == 0 then
 		return list
 	end
@@ -309,8 +309,10 @@ end
 
 -- ---- what goes out ----------------------------------------------------------------------------------------
 
-local function section(title, extra)
-	local box = b.div():col():px(12):py(10):no_shrink()
+-- A part of the panel, `width` wide: what is in it is held to the panel's width, so that a long line
+-- of what goes out scrolls in its own box and does not widen the rest.
+local function section(width, title, extra)
+	local box = b.div():col():w(width):px(12):py(10):no_shrink()
 	local head = b.div():row():items_center():gap(4):pb(6):child(T(title, "dim", SIZE.small, 600))
 	if extra then
 		head:child(T(extra, "quiet", SIZE.small))
@@ -321,7 +323,7 @@ end
 local function output_tab(width)
 	A.want_output()
 	local out = S.output
-	local list = b.div():id("panel"):col():grow(1):min_h(0):scroll_y(L.ui:scroll_offset("panel"))
+	local list = b.div():id("panel"):col():w(width):grow(1):min_h(0):scroll_y(L.ui:scroll_offset("panel"))
 	if out == nil then
 		return list
 	end
@@ -329,6 +331,7 @@ local function output_tab(width)
 	local inner = width - 24
 	local command = b.div()
 		:row()
+		:w(inner)
 		:items_start()
 		:gap(6)
 		:px(8)
@@ -338,7 +341,7 @@ local function output_tab(width)
 		:border(1, L.line2)
 		:child(T(again.line, "foreground"):wrap():max_w(inner - 50):grow(1):min_w(0))
 		:child(L.icon_button("copycmd", "copy", 13, 22, "Copy the command"))
-	local said = b.div():row():wrap():items_center():gap_x(4):pt(6)
+	local said = b.div():row():wrap():w(inner):items_center():gap_x(4):pt(6)
 	local where_said = again.where == ""
 	if again.kind == "same" then
 		said:child(L.icon("check", 13, "success"))
@@ -376,14 +379,14 @@ local function output_tab(width)
 		end
 		said:child(T(words, "dim"):wrap():max_w(inner - 20))
 	end
-	list:child(section("Again, with nobody to ask"):child(command):child(said))
+	list:child(section(width, "Again, with nobody to ask"):child(command):child(said))
 	list:child(b.div():h(1):bg(L.line2):no_shrink())
 
 	local count = out.count
 	local extra = count == 0 and "· nothing yet"
 		or ("· " .. L.plural(count, "row") .. (count > 200 and ", the first 200 shown" or ""))
-	local goes = section("What goes out", extra)
-	local fields = b.div():row():wrap():items_center():gap(4):pb(6)
+	local goes = section(width, "What goes out", extra)
+	local fields = b.div():row():wrap():w(inner):items_center():gap(4):pb(6)
 	local sent = A.sent_fields()
 	if #sent > 0 then
 		for i, field in ipairs(sent) do
@@ -414,6 +417,7 @@ local function output_tab(width)
 	local text = b.div()
 		:id("out")
 		:col()
+		:w(inner)
 		:px(8)
 		:py(6)
 		:rounded(6)
