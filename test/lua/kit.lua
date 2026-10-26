@@ -111,12 +111,15 @@ function M.start(prelude_dir, page_path)
 		scroll_extent = function(id)
 			local extent = self.extents[id]
 			if extent then
-				-- A test says how far a box reaches down; across it reaches no further than it is.
+				-- A test says how far a box reaches down, and across; unsaid, across it reaches no further than it is.
+				local content_w, view_w = extent.content_w or 0, extent.view_w or 0
 				return {
 					content = extent.content,
 					view = extent.view,
-					content_w = extent.content_w or 0,
-					view_w = extent.view_w or 0,
+					content_w = content_w,
+					view_w = view_w,
+					max_offset = extent.max_offset or math.max(0, extent.content - extent.view),
+					max_offset_x = math.max(0, content_w - view_w),
 				}
 			end
 			return nil

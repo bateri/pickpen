@@ -67,6 +67,7 @@ local function preview_tab(width)
 	local text = b.div()
 		:id("preview")
 		:col()
+		:items_start()
 		:grow(1)
 		:min_h(0)
 		:px(12)
@@ -414,9 +415,12 @@ local function output_tab(width)
 	if out.error then
 		goes:child(T(out.error, "error"):wrap():max_w(inner):pb(6))
 	end
-	local text = b.div()
+	local text = b
+		.div()
 		:id("out")
 		:col()
+		-- Each line as wide as its text, so that a long one gives the box something to scroll across.
+		:items_start()
 		:w(inner)
 		:px(8)
 		:py(6)
