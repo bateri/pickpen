@@ -466,3 +466,30 @@ t.test("the cursor going out of sight asks the host to scroll the list to it", f
 	key(k, "down", { command = true })
 	t.eq(k.offsets.rows.y, 22 * 50 - 66, "the last row: the end of the list")
 end)
+
+t.test("a turn of the wheel within the rows made builds nothing; one near their end builds more", function()
+	local rows = {}
+	for i = 1, 400 do
+		rows[i] = { "pod-" .. i, "Running", i .. "m" }
+	end
+	local k = opened(rows)
+	-- Ten rows of twenty-two points in sight, of four hundred.
+	k.extents.rows = { content = 22 * 400, view = 220 }
+	k:render(W, H, 101)
+	k:settle()
+	k:render(W, H, 101.1)
+	local made = function()
+		local count = 0
+		for i = 1, 400 do
+			if kit.find(k.root, "r:" .. i) then
+				count += 1
+			end
+		end
+		return count
+	end
+	t.ok(made() > 10, "more than is in sight is made: " .. made())
+	t.eq(k:wheel("rows", 0, 44), false, "two rows down: the host moved what was made")
+	t.eq(k:wheel("rows", 0, 22 * 60), true, "sixty more: past the end of what was made")
+	k:render(W, H, 101.2)
+	t.ok(kit.find(k.root, "r:70") ~= nil, "and the rows there are made")
+end)

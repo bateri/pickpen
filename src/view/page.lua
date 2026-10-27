@@ -709,11 +709,13 @@ end
 local function on_scrolled(event)
 	for _, box in ipairs(event.boxes) do
 		if box.id == "rows" then
+			local seen = false
 			local extent = pencere.layout.scroll_extent("rows")
-			if extent and box.y >= extent.max_offset - L.SIZE.row then
-				S.unseen = 0
+			if extent and box.y >= extent.max_offset - L.SIZE.row and S.unseen > 0 then
+				S.unseen, seen = 0, true
 			end
-			return true
+			-- The rows made hold what is in sight: the host has moved them, and nothing is to be built.
+			return R.near_end(box.y) or R.across_changed(box.x) or seen
 		end
 	end
 	return false

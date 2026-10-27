@@ -17,8 +17,11 @@ local R = {}
 
 -- The most of a cell drawn; a longer one is cut where it would not be seen anyway.
 local DRAWN = 400
--- Rows made beyond those in sight, above and below: enough for a turn of the wheel to find them made.
-local OVERSCAN = 3
+-- The host scrolls the rows made at once and the page catches up a frame or two later, so more is
+-- made than is in sight: a screen of rows the way the list goes and half a screen the other way.
+-- The page is built again only when what is in sight comes within half a screen of an end of what
+-- was made, not at every turn of the wheel.
+local AHEAD, BEHIND, NEAR = 1.5, 0.5, 0.75
 -- Points of columns made beyond the edges of the list, so that a column coming into sight is there.
 local OVERSCAN_X = 60
 
@@ -26,6 +29,60 @@ local QUANTITIES = { number = true, size = true, duration = true }
 
 -- How big the list's box was laid out, from the last frame (`settle` keeps it).
 R.view = { w = 800, h = 400 }
+
+-- The rows the last build made (`{ first =, last =, shown = }`), and how far down the list was then;
+-- how far across it was when the columns in sight were made.
+local made, made_at, made_x = nil, 0, 0
+
+-- Whether the list `ox` points across has moved far enough from where its columns were made for
+-- one to come into sight that was not made.
+function R.across_changed(ox)
+	return math.abs(ox - made_x) > OVERSCAN_X / 2
+end
+
+-- The rows in sight with the list `oy` points down.
+local function in_sight(oy)
+	local view_h = math.max(R.view.h, SIZE.row)
+	local first = math.max(1, math.floor(oy / SIZE.row) + 1)
+	local last = math.min(S.sum.shown, math.ceil((oy + view_h) / SIZE.row))
+	return first, last, math.ceil(view_h / SIZE.row)
+end
+
+-- Whether the rows in sight with the list `oy` points down are near the end of the rows made the way
+-- the list goes (or past either end), so the page is to be built again.
+local seen_at = 0
+function R.near_end(oy)
+	local down = oy >= seen_at
+	seen_at = oy
+	if made == nil or made.shown ~= S.sum.shown then
+		return true
+	end
+	local first, last, screen = in_sight(oy)
+	local near = math.ceil(screen * NEAR)
+	if first < made.first or last > made.last then
+		return true
+	end
+	if down then
+		return made.last < made.shown and last + near > made.last
+	end
+	return made.first > 1 and first - near < made.first
+end
+
+-- The rows to make with the list `oy` points down: those made already while they still hold what is
+-- in sight with room, else a new span around it, longer the way the list went.
+local function span(oy)
+	local shown = S.sum.shown
+	if not R.near_end(oy) then
+		return made.first, made.last
+	end
+	local first, last, screen = in_sight(oy)
+	local down = oy >= made_at
+	local before = math.ceil(screen * (down and BEHIND or AHEAD))
+	local after = math.ceil(screen * (down and AHEAD or BEHIND))
+	made = { first = math.max(1, first - before), last = math.min(shown, last + after), shown = shown }
+	made_at = oy
+	return made.first, made.last
+end
 
 function R.is_quantity(column)
 	local kinds = S.sum and S.sum.kinds or {}
@@ -287,12 +344,12 @@ function R.view_of()
 			visible[#visible + 1] = place
 		end
 	end
+	made_x = ox
 	local layout = { columns = columns, visible = visible, skipped = skipped, total = total, words = words_of() }
 	R.last_layout = layout
 	local shown = sum.shown
 	local view_h = math.max(R.view.h, SIZE.row)
-	local first = math.max(1, math.floor(oy / SIZE.row) + 1 - OVERSCAN)
-	local last = math.min(shown, math.ceil((oy + view_h) / SIZE.row) + OVERSCAN)
+	local first, last = span(oy)
 	A.set_page_rows(math.floor(view_h / SIZE.row))
 	A.need(first, last)
 
