@@ -489,10 +489,10 @@ t.test("a turn of the wheel within the rows made builds nothing; one near their 
 	end
 	t.ok(made() > 10, "more than is in sight is made: " .. made())
 	t.eq(k:wheel("rows", 0, 44), false, "two rows down: the host moved what was made")
-	t.eq(kit.find(k.root, "r:110"), nil, "rows far below are not made")
-	t.eq(k:wheel("rows", 0, 22 * 100), true, "a hundred more: past the end of what was made")
+	t.eq(kit.find(k.root, "r:250"), nil, "rows far below are not made")
+	t.eq(k:wheel("rows", 0, 22 * 240), true, "far down: past the end of what was made")
 	k:render(W, H, 101.2)
-	t.ok(kit.find(k.root, "r:110") ~= nil, "and the rows there are made")
+	t.ok(kit.find(k.root, "r:250") ~= nil, "and the rows there are made")
 end)
 
 t.test("going up, the rows above are made as the rows below are going down", function()

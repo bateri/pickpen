@@ -714,8 +714,9 @@ local function on_scrolled(event)
 			if extent and box.y >= extent.max_offset - L.SIZE.row and S.unseen > 0 then
 				S.unseen, seen = 0, true
 			end
-			-- The rows made hold what is in sight: the host has moved them, and nothing is to be built.
-			return R.stale(box.y) or R.across_changed(box.x) or seen
+			-- Down, the kit builds the list again near the end of the rows made; across, the columns
+			-- coming into sight are made here.
+			return R.across_changed(box.x) or seen
 		end
 	end
 	return false

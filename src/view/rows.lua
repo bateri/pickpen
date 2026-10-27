@@ -25,31 +25,14 @@ local QUANTITIES = { number = true, size = true, duration = true }
 -- How big the list's box was laid out, from the last frame (`settle` keeps it).
 R.view = { w = 800, h = 400 }
 
--- Which rows the last build made, and which way the list goes (the kit's: more is made the way it
--- goes, and it is built again only near the end of what was made); and how far across the list was
--- when the columns in sight were made.
-local built = pencere.Built.new()
+-- How far across the list was when the columns in sight were made. (Which rows are made, and when
+-- they are made again, is the kit's: `:list`.)
 local made_x = 0
-
--- The list's rows: all of one height, however many.
-local function rows_of()
-	return pencere.Rows.even(S.sum.shown, SIZE.row)
-end
-
-local function view_h()
-	return math.max(R.view.h, SIZE.row)
-end
 
 -- Whether the list `ox` points across has moved far enough from where its columns were made for
 -- one to come into sight that was not made.
 function R.across_changed(ox)
 	return math.abs(ox - made_x) > OVERSCAN_X / 2
-end
-
--- Whether the list scrolled to `oy` down is to be built again: what is in sight is past the rows
--- made, or near their end the way the list goes.
-function R.stale(oy)
-	return built:stale(rows_of(), oy, view_h())
 end
 
 function R.is_quantity(column)
@@ -301,7 +284,7 @@ end
 function R.view_of()
 	local sum = S.sum
 	local columns, total = R.columns()
-	local oy, ox = L.scrolled("rows"), L.scrolled_x("rows")
+	local ox = L.scrolled_x("rows")
 	-- Only the columns in sight are made (a row of a wide table is a few of its cells, not all), the
 	-- room of those to their left kept by one empty box; those to the right need none.
 	local visible, skipped = {}, 0
@@ -316,16 +299,16 @@ function R.view_of()
 	local layout = { columns = columns, visible = visible, skipped = skipped, total = total, words = words_of() }
 	R.last_layout = layout
 	local shown = sum.shown
-	local first, last = built:span(rows_of(), oy, view_h())
-	A.set_page_rows(math.floor(view_h() / SIZE.row))
-	A.need(first, last)
-
+	-- The rows near what is in sight are made, more of them the way the list goes (the kit's), and
+	-- the program is asked for those it has not given; a box as wide as the table keeps its width
+	-- across when there is no row to.
 	local list = b.div():id("rows"):col():grow(1):min_h(0):scroll():family("terminal"):text_size(SIZE.cell)
-	list:child(b.div():h(math.max(first - 1, 0) * SIZE.row):w(total):no_shrink())
-	for index = first, last do
-		list:child(row_of(index, layout))
-	end
-	list:child(b.div():h(math.max(shown - last, 0) * SIZE.row):w(total):no_shrink())
+	list:list(pencere.Rows.even(shown, SIZE.row), function(index)
+		return row_of(index, layout)
+	end)
+	list:child(b.div():w(total):h(0):no_shrink())
+	A.set_page_rows(math.floor(math.max(R.view.h, SIZE.row) / SIZE.row))
+	A.need(pencere.list_window("rows"))
 
 	local head = b.div():h(SIZE.head):no_shrink():clip():bg("background"):child(b.div():ml(-ox):child(head_of(layout)))
 	local area = b.div():col():grow(1):min_w(0):min_h(0):opacity(S.sending and 0.55 or 1)
