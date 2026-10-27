@@ -493,3 +493,23 @@ t.test("a turn of the wheel within the rows made builds nothing; one near their 
 	k:render(W, H, 101.2)
 	t.ok(kit.find(k.root, "r:70") ~= nil, "and the rows there are made")
 end)
+
+t.test("going up, the rows above are made as the rows below are going down", function()
+	local rows = {}
+	for i = 1, 400 do
+		rows[i] = { "pod-" .. i, "Running", i .. "m" }
+	end
+	local k = opened(rows)
+	k.extents.rows = { content = 22 * 400, view = 220 }
+	k:render(W, H, 101)
+	k:settle()
+	-- Far down, and made there.
+	t.eq(k:wheel("rows", 0, 22 * 200), true)
+	k:render(W, H, 101.1)
+	t.ok(kit.find(k.root, "r:205") ~= nil)
+	t.eq(kit.find(k.root, "r:185"), nil, "little is made behind the way the list went")
+	-- Three rows up: near the top of what was made, the way the list goes now.
+	t.eq(k:wheel("rows", 0, -22 * 3), true, "near the top of what was made")
+	k:render(W, H, 101.2)
+	t.ok(kit.find(k.root, "r:185") ~= nil, "and the build makes the rows above")
+end)

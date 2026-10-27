@@ -30,9 +30,19 @@ local QUANTITIES = { number = true, size = true, duration = true }
 -- How big the list's box was laid out, from the last frame (`settle` keeps it).
 R.view = { w = 800, h = 400 }
 
--- The rows the last build made (`{ first =, last =, shown = }`), and how far down the list was then;
--- how far across it was when the columns in sight were made.
-local made, made_at, made_x = nil, 0, 0
+-- The rows the last build made (`{ first =, last =, shown = }`), and how far across the list was
+-- when the columns in sight were made.
+local made, made_x = nil, 0
+
+-- Which way the list last went, and where it was then: the way is changed only by a move, so that
+-- asking again at the same place (the build that a move asked for) finds the way it went.
+local going_down, seen_at = true, 0
+local function went(oy)
+	if oy ~= seen_at then
+		going_down = oy > seen_at
+		seen_at = oy
+	end
+end
 
 -- Whether the list `ox` points across has moved far enough from where its columns were made for
 -- one to come into sight that was not made.
@@ -50,10 +60,8 @@ end
 
 -- Whether the rows in sight with the list `oy` points down are near the end of the rows made the way
 -- the list goes (or past either end), so the page is to be built again.
-local seen_at = 0
 function R.near_end(oy)
-	local down = oy >= seen_at
-	seen_at = oy
+	went(oy)
 	if made == nil or made.shown ~= S.sum.shown then
 		return true
 	end
@@ -62,25 +70,23 @@ function R.near_end(oy)
 	if first < made.first or last > made.last then
 		return true
 	end
-	if down then
+	if going_down then
 		return made.last < made.shown and last + near > made.last
 	end
 	return made.first > 1 and first - near < made.first
 end
 
 -- The rows to make with the list `oy` points down: those made already while they still hold what is
--- in sight with room, else a new span around it, longer the way the list went.
+-- in sight with room, else a new span around it, longer the way the list goes.
 local function span(oy)
 	local shown = S.sum.shown
 	if not R.near_end(oy) then
 		return made.first, made.last
 	end
 	local first, last, screen = in_sight(oy)
-	local down = oy >= made_at
-	local before = math.ceil(screen * (down and BEHIND or AHEAD))
-	local after = math.ceil(screen * (down and AHEAD or BEHIND))
+	local before = math.ceil(screen * (going_down and BEHIND or AHEAD))
+	local after = math.ceil(screen * (going_down and AHEAD or BEHIND))
 	made = { first = math.max(1, first - before), last = math.min(shown, last + after), shown = shown }
-	made_at = oy
 	return made.first, made.last
 end
 
