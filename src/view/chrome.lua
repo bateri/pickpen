@@ -23,6 +23,15 @@ local WORDS = {
 	["<="] = "at most",
 }
 
+-- How a word is read, by where in a cell it is looked for (`^word`, `word$`, `^word$`).
+local AT = { anywhere = "has", start = "a cell starts with", ["end"] = "a cell ends with", whole = "a cell is" }
+local AT_NOT = {
+	anywhere = "without",
+	start = "no cell starts with",
+	["end"] = "no cell ends with",
+	whole = "no cell is",
+}
+
 -- How a term was read, a chip that says it; its × takes it out.
 local function chip(index, term)
 	local box = b.div()
@@ -42,26 +51,36 @@ local function chip(index, term)
 	local function value(words)
 		box:child(T(L.cut(words, 60), "foreground", nil, 600))
 	end
-	if term.kind == "text" then
-		op(term.negate and "without" or "has")
-		value(term.text)
-	else
-		box:child(T(L.cut(term.name, 40), "accent", nil, 600))
-		if term.range then
-			op("between")
-			value(term.range[1])
-			op("and")
-			value(term.range[2])
-		else
-			op(WORDS[term.op] or term.op)
-			for i, v in ipairs(term.values) do
+	local function say(t)
+		if t.kind == "any" then
+			for i, one in ipairs(t.terms) do
 				if i > 1 then
 					op("or")
 				end
-				value(v == "" and "empty" or v)
+				say(one)
+			end
+		elseif t.kind == "text" then
+			op((t.negate and AT_NOT or AT)[t.at] or (t.negate and "without" or "has"))
+			value(t.text)
+		else
+			box:child(T(L.cut(t.name, 40), "accent", nil, 600))
+			if t.range then
+				op("between")
+				value(t.range[1])
+				op("and")
+				value(t.range[2])
+			else
+				op(WORDS[t.op] or t.op)
+				for i, v in ipairs(t.values) do
+					if i > 1 then
+						op("or")
+					end
+					value(v == "" and "empty" or v)
+				end
 			end
 		end
 	end
+	say(term)
 	box:child(L.icon_button("cx:" .. index, "x", 11, 15, "Take this term out"))
 	return box
 end
@@ -322,12 +341,14 @@ local MOUSE = {
 local QUERY = {
 	{ "word", "the row holds it, in any column, in any case" },
 	{ "!word", "it does not" },
+	{ "^web  .log$", "a cell starts with it, or ends with it; ^web$ a cell is it" },
 	{ '"two words"', "quotes keep spaces in a word or a value" },
 	{ "STATUS=Running", "the column is that; =a|b either" },
 	{ "STATUS!=Running", "it is not" },
 	{ "NAME~web  NAME!~web", "it holds web, or does not" },
 	{ "cpu>50  size>=1G  age<2h", "quantities compare as quantities" },
 	{ "latency=100..400", "between, both ends included" },
+	{ "web | api", "either: a | alone joins the terms on its two sides" },
 }
 
 local function help_row(what, does, code)
@@ -386,7 +407,7 @@ function K.help()
 	end
 	query:child(
 		T(
-				"Every term must hold. A column is named as its heading is, or with only its letters (cpu for %CPU). The same query, given to --where, chooses the same rows with no one to ask.",
+				"Every term must hold, or one of those a | joins. A column is named as its heading is, or with only its letters (cpu for %CPU). The same query, given to --where, chooses the same rows with no one to ask.",
 				"quiet"
 			)
 			:wrap()

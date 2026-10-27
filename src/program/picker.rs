@@ -533,32 +533,48 @@ impl Picker {
         }
     }
 
+    fn term_json(&self, term: &Term) -> Value {
+        match term {
+            Term::Text {
+                text,
+                negate,
+                at,
+                from,
+                to,
+            } => {
+                json!({ "kind": "text", "text": text, "negate": negate, "at": at.name(), "from": from, "to": to })
+            }
+            Term::Any { terms, from, to } => {
+                let terms: Vec<Value> = terms.iter().map(|t| self.term_json(t)).collect();
+                json!({ "kind": "any", "terms": terms, "from": from, "to": to })
+            }
+            Term::Field {
+                column,
+                op,
+                values,
+                range,
+                from,
+                to,
+                ..
+            } => {
+                let mut v = json!({
+                    "kind": "field",
+                    "name": self.names.get(*column).cloned().unwrap_or_default(),
+                    "op": op.as_str(),
+                    "values": values,
+                    "from": from,
+                    "to": to,
+                });
+                if let Some((low, high)) = range {
+                    v["range"] = json!([low, high]);
+                }
+                v
+            }
+        }
+    }
+
     pub fn terms_json(&self) -> Value {
-        Value::Array(
-            self.query
-                .terms
-                .iter()
-                .map(|term| match term {
-                    Term::Text { text, negate, from, to } => {
-                        json!({ "kind": "text", "text": text, "negate": negate, "from": from, "to": to })
-                    }
-                    Term::Field { column, op, values, range, from, to, .. } => {
-                        let mut v = json!({
-                            "kind": "field",
-                            "name": self.names.get(*column).cloned().unwrap_or_default(),
-                            "op": op.as_str(),
-                            "values": values,
-                            "from": from,
-                            "to": to,
-                        });
-                        if let Some((low, high)) = range {
-                            v["range"] = json!([low, high]);
-                        }
-                        v
-                    }
-                })
-                .collect(),
-        )
+        Value::Array(self.query.terms.iter().map(|t| self.term_json(t)).collect())
     }
 
     /// What the view is told of the rows: how many there are, are shown and are marked, the columns,

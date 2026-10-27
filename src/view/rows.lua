@@ -69,14 +69,20 @@ function R.columns()
 	return out, math.max(total, R.view.w)
 end
 
--- The words of the query, for drawing where they are in each cell: longest first.
+-- The words of the query, for drawing where they are in each cell: longest first. Those of either
+-- side of a `|` are drawn too, and one held at a cell's start or end wherever it is.
 local function words_of()
 	local words = {}
-	for _, term in ipairs(S.terms) do
-		if term.kind == "text" and not term.negate and term.text ~= "" then
-			words[#words + 1] = string.lower(term.text)
+	local function add(terms)
+		for _, term in ipairs(terms) do
+			if term.kind == "any" then
+				add(term.terms)
+			elseif term.kind == "text" and not term.negate and term.text ~= "" then
+				words[#words + 1] = string.lower(term.text)
+			end
 		end
 	end
+	add(S.terms)
 	table.sort(words, function(x, y)
 		return #x > #y
 	end)

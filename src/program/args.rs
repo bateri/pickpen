@@ -37,10 +37,11 @@ you choose in the terminal pane, and the rows you chose go out on stdout.
   -h, --help             this text
   -v, --version          the version
 
-The query: words the row must hold, !word for one it must not, and
-COLUMN=v, !=, ~ (holds), !~, >, >=, <, <=, and a..b, with quantities read
-as such: cpu>50, size>1G, age<2h. The same query does the same in the view
-and with --where.
+The query: words the row must hold, !word for one it must not, ^word and
+word$ for a cell that starts or ends with it, and COLUMN=v, !=, ~ (holds),
+!~, >, >=, <, <=, and a..b, with quantities read as such: cpu>50, size>1G,
+age<2h. Every term must hold; a | alone between two keeps rows with either.
+The same query does the same in the view and with --where.
 
 Exit status: 0 rows went out, 1 none did, 2 a person was needed and there
 was no terminal that shows pencere views, 64 the command line was wrong,

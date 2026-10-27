@@ -185,3 +185,31 @@ fn text_compares_with_its_numbers_by_value() {
     assert_eq!(quote_value("say \"hi\""), "'say \"hi\"'");
     assert_eq!(quote_name("NAME"), "NAME");
 }
+
+#[test]
+fn a_word_may_be_at_a_cells_start_or_end_and_terms_joined_by_a_bar_are_either() {
+    let none: [&str; 0] = [];
+    assert_eq!(keep("^web"), ["web-1", "web-2"]);
+    assert_eq!(keep("^eb"), none);
+    assert_eq!(keep("-1$"), ["web-1", "db-1"]);
+    assert_eq!(keep("^running$"), ["web-1", "db-1"]);
+    assert_eq!(keep("^run$"), none);
+    assert_eq!(keep("!^web"), ["db-1", "cache"]);
+    // Quoted, they are the word's own.
+    assert_eq!(keep("\"^web\""), none);
+    assert_eq!(keep("^\"up 2\""), ["cache"]);
+    assert_eq!(keep("\"hours$\""), none);
+    assert_eq!(keep("cache | db"), ["db-1", "cache"]);
+    assert_eq!(keep("web | db-1 running"), ["web-1", "db-1"]);
+    assert_eq!(keep("STATUS=Pending | cpu>50"), ["db-1", "cache"]);
+    assert_eq!(keep("crash | ^db | pending"), ["web-2", "db-1", "cache"]);
+    assert_eq!(keep("\"|\""), none);
+    assert_eq!(keep("| web |"), ["web-1", "web-2"]);
+    // Alone, `^` and `$` are words.
+    assert_eq!(keep("^ $"), none);
+
+    let q = parse("a | !b c", &columns());
+    assert_eq!(q.terms.len(), 2);
+    assert_eq!((q.terms[0].from(), q.terms[0].to()), (0, 6));
+    assert!(matches!(&q.terms[0], Term::Any { terms, .. } if terms.len() == 2));
+}

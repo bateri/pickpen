@@ -198,6 +198,7 @@ test("the view is told the command line, and the rows so far", () => {
 
 for (const [file, where, extra] of [
   ["pods.txt", "STATUS!=Running AGE<1h", ["--field", "NAME"]],
+  ["pods.txt", "^web | ^worker | ^api !^running$", ["--field", "NAME"]],
   ["requests.jsonl", "status>=400 ms>100 !health", ["--sort", "-ms"]],
   ["servers.csv", "role=db|cache cpu>50", ["--sort", "memory"]],
   ["ps.txt", "%cpu>2 !postgres", ["--format", "kill {PID} # {COMMAND}"]],

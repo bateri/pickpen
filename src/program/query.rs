@@ -5,7 +5,8 @@
 //! ```text
 //!   word            the row holds the word, in any column, in any case
 //!   !word           it does not
-//!   "two words"     quotes keep spaces in a word or a value
+//!   ^word  word$    a cell starts with the word, or ends with it; `^word$` a cell is the word
+//!   "two words"     quotes keep spaces in a word or a value (and `"^a$"` is a word of three)
 //!   col=v           the column is v (a quantity compares as one: `size=1G`), `col=a|b` either
 //!   col!=v          it is not
 //!   col~v  col!~v   it holds v, or does not, in any case
@@ -13,6 +14,7 @@
 //!                   compared as quantities when both are one (`cpu>50`, `age<2h`, `size>1G`),
 //!                   otherwise as text
 //!   col=a..b        between a and b, both included
+//!   a | b           either term holds: a `|` alone joins the terms on its two sides
 //! ```
 //!
 //! Every term must hold. A column is named as its heading is, in any case, or with only its
@@ -99,6 +101,27 @@ impl Read {
     }
 }
 
+/// Where in a cell a word is looked for: anywhere, at its start (`^word`), at its end (`word$`),
+/// or as the whole of it (`^word$`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum At {
+    Anywhere,
+    Start,
+    End,
+    Whole,
+}
+
+impl At {
+    pub fn name(self) -> &'static str {
+        match self {
+            At::Anywhere => "anywhere",
+            At::Start => "start",
+            At::End => "end",
+            At::Whole => "whole",
+        }
+    }
+}
+
 // A query has a few terms: boxing the larger kind would save nothing worth a pointer.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq)]
@@ -108,6 +131,15 @@ pub enum Term {
         /// In lower case.
         text: String,
         negate: bool,
+        at: At,
+        from: usize,
+        to: usize,
+    },
+    /// Terms joined by `|`: one of them must hold. What a click writes into the query (`with_term`)
+    /// and what a column's panel reads of it (`without_column`, its chosen values and range) are
+    /// terms of their own, so a term inside one of these is none of theirs.
+    Any {
+        terms: Vec<Term>,
         from: usize,
         to: usize,
     },
@@ -125,19 +157,19 @@ pub enum Term {
     },
 }
 
-#[cfg(test)]
 impl Term {
     /// Where the term begins in the query, in bytes.
     pub fn from(&self) -> usize {
         match self {
-            Term::Text { from, .. } | Term::Field { from, .. } => *from,
+            Term::Text { from, .. } | Term::Any { from, .. } | Term::Field { from, .. } => *from,
         }
     }
 
     /// Where the term ends in the query, in bytes.
+    #[cfg(test)]
     pub fn to(&self) -> usize {
         match self {
-            Term::Text { to, .. } | Term::Field { to, .. } => *to,
+            Term::Text { to, .. } | Term::Any { to, .. } | Term::Field { to, .. } => *to,
         }
     }
 }
@@ -331,61 +363,127 @@ fn range_of(value: &str) -> Option<(String, String)> {
     None
 }
 
-pub fn parse(source: &str, columns: &[String]) -> Query {
-    let mut terms = Vec::new();
-    for token in tokenize(source) {
-        if let Some((at, op)) = find_operator(token.raw).filter(|(at, _)| *at > 0) {
-            let name = unquote(&token.raw[..at]);
-            if let Some(column) = column_named(columns, &name) {
-                let value = unquote(&token.raw[at + op.as_str().len()..]);
-                let range = if op == Operator::Eq {
-                    range_of(&value)
-                } else {
-                    None
-                };
-                let values: Vec<String> = if op == Operator::Eq || op == Operator::Ne {
-                    value.split('|').map(str::to_string).collect()
-                } else {
-                    vec![value]
-                };
-                let read: Vec<Read> = values.iter().map(|v| Read::new(v)).collect();
-                let bounds = range
-                    .as_ref()
-                    .map(|(low, high)| (Read::new(low), Read::new(high)));
-                let quantities = read.iter().any(|r| r.q.is_some())
-                    || bounds
-                        .as_ref()
-                        .is_some_and(|(l, h)| l.q.is_some() || h.q.is_some());
-                terms.push(Term::Field {
-                    column,
-                    op,
-                    values,
-                    range,
-                    from: token.from,
-                    to: token.to,
-                    prepared: Prepared {
-                        read,
-                        bounds,
-                        quantities,
-                    },
-                });
-                continue;
-            }
+/// Whether the last character of a raw token is outside quotes, as `$` must be to anchor a word.
+fn last_unquoted(raw: &str) -> bool {
+    let mut quote: Option<char> = None;
+    let mut chars = raw.chars().peekable();
+    while let Some(c) = chars.next() {
+        if chars.peek().is_none() {
+            return quote.is_none();
         }
-        let negate = token.raw.starts_with('!') && token.raw.len() > 1;
-        let text = if negate {
-            unquote(&token.raw[1..])
-        } else {
-            token.text
-        };
-        if text.is_empty() {
+        match quote {
+            Some(q) if c == q => quote = None,
+            None if c == '"' || c == '\'' => quote = Some(c),
+            _ => {}
+        }
+    }
+    false
+}
+
+/// One token as a term: a comparison of a column, a word, or nothing (a word with no text).
+fn term_of(token: &Token<'_>, columns: &[String]) -> Option<Term> {
+    if let Some((at, op)) = find_operator(token.raw).filter(|(at, _)| *at > 0) {
+        let name = unquote(&token.raw[..at]);
+        if let Some(column) = column_named(columns, &name) {
+            let value = unquote(&token.raw[at + op.as_str().len()..]);
+            let range = if op == Operator::Eq {
+                range_of(&value)
+            } else {
+                None
+            };
+            let values: Vec<String> = if op == Operator::Eq || op == Operator::Ne {
+                value.split('|').map(str::to_string).collect()
+            } else {
+                vec![value]
+            };
+            let read: Vec<Read> = values.iter().map(|v| Read::new(v)).collect();
+            let bounds = range
+                .as_ref()
+                .map(|(low, high)| (Read::new(low), Read::new(high)));
+            let quantities = read.iter().any(|r| r.q.is_some())
+                || bounds
+                    .as_ref()
+                    .is_some_and(|(l, h)| l.q.is_some() || h.q.is_some());
+            return Some(Term::Field {
+                column,
+                op,
+                values,
+                range,
+                from: token.from,
+                to: token.to,
+                prepared: Prepared {
+                    read,
+                    bounds,
+                    quantities,
+                },
+            });
+        }
+    }
+    // `!`, then `^`, then `$` at the end, each outside quotes and with something besides itself.
+    let mut raw = token.raw;
+    let negate = raw.starts_with('!') && raw.len() > 1;
+    if negate {
+        raw = &raw[1..];
+    }
+    let start = raw.starts_with('^') && raw.len() > 1;
+    if start {
+        raw = &raw[1..];
+    }
+    let end = raw.ends_with('$') && raw.len() > 1 && last_unquoted(raw);
+    if end {
+        raw = &raw[..raw.len() - 1];
+    }
+    let text = unquote(raw);
+    if text.is_empty() {
+        return None;
+    }
+    Some(Term::Text {
+        text: text.to_lowercase(),
+        negate,
+        at: match (start, end) {
+            (false, false) => At::Anywhere,
+            (true, false) => At::Start,
+            (false, true) => At::End,
+            (true, true) => At::Whole,
+        },
+        from: token.from,
+        to: token.to,
+    })
+}
+
+pub fn parse(source: &str, columns: &[String]) -> Query {
+    let mut terms: Vec<Term> = Vec::new();
+    // A `|` alone came after the last term: the next one is its other side.
+    let mut join = false;
+    for token in tokenize(source) {
+        if token.raw == "|" {
+            join = !terms.is_empty();
             continue;
         }
-        terms.push(Term::Text {
-            text: text.to_lowercase(),
-            negate,
-            from: token.from,
-            to: token.to,
+        let Some(term) = term_of(&token, columns) else {
+            continue;
+        };
+        let last = if join { terms.pop() } else { None };
+        join = false;
+        terms.push(match last {
+            Some(Term::Any {
+                terms: mut any,
+                from,
+                ..
+            }) => {
+                any.push(term);
+                Term::Any {
+                    terms: any,
+                    from,
+                    to: token.to,
+                }
+            }
+            Some(last) => Term::Any {
+                from: last.from(),
+                terms: vec![last, term],
+                to: token.to,
+            },
+            None => term,
         });
     }
     let empty = terms.is_empty();
@@ -628,9 +726,22 @@ fn equal(cell: &str, value: &Read, cell_q: Option<Quantity>) -> bool {
     same_lower(js_trim(cell), &value.lower)
 }
 
+/// Whether a word is where `at` says in a cell of the row, `lower` being its cells joined by tabs.
+fn has_word(lower: &str, text: &str, at: At) -> bool {
+    match at {
+        At::Anywhere => lower.contains(text),
+        At::Start => lower.split('\t').any(|cell| cell.starts_with(text)),
+        At::End => lower.split('\t').any(|cell| cell.ends_with(text)),
+        At::Whole => lower.split('\t').any(|cell| cell == text),
+    }
+}
+
 fn holds(term: &Term, cells: &[String], lower: &str) -> bool {
     let (column, op, term) = match term {
-        Term::Text { text, negate, .. } => return lower.contains(text.as_str()) != *negate,
+        Term::Text {
+            text, negate, at, ..
+        } => return has_word(lower, text, *at) != *negate,
+        Term::Any { terms, .. } => return terms.iter().any(|t| holds(t, cells, lower)),
         Term::Field {
             column,
             op,

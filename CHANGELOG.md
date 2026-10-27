@@ -15,9 +15,10 @@ change what the previous one did.
 - `--delimiter` to cut lines into columns `1`, `2`, … at a text, the last taking the rest of the
   line (`grep -n`), `--read0` for rows that end at NUL (`find -print0`), and `--print0` to end each
   row written with NUL (`xargs -0`).
-- A query that typing always goes to: words, `!word`, and columns compared by their headings, with
-  sizes, lengths of time, dates and numbers compared as such (`cpu>50`, `age<2h`, `size>1G`,
-  `ms=100..400`); each term shown as it was read, and taken out with a click.
+- A query that typing always goes to: words, `!word`, `^word` and `word$` for a cell's start and
+  end, `a | b` for either, and columns compared by their headings, with sizes, lengths of time,
+  dates and numbers compared as such (`cpu>50`, `age<2h`, `size>1G`, `ms=100..400`); each term
+  shown as it was read, and taken out with a click.
 - Marking with the keyboard (`Tab`, `⇧↑` `⇧↓`, `⌘A`) and the mouse (the boxes, a drag down them,
   ⌘- and ⇧-click), ordering by any column, a palette of every command (`⌘K`) and the keys on one
   page (`F1`).

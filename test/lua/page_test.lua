@@ -75,8 +75,9 @@ function Program:summary()
 		kinds = self.kinds,
 		widths = { 20, 10, 6 },
 		placeholder = "Type to filter: words, !word, STATUS=Running, AGE<1h — F1 for more",
-		terms = self.query == "" and {}
-			or { { kind = "text", text = self.query, negate = false, from = 0, to = #self.query } },
+		terms = self.terms or self.query == "" and {} or {
+			{ kind = "text", text = self.query, negate = false, at = "anywhere", from = 0, to = #self.query },
+		},
 		unknown = {},
 	}
 end
@@ -259,6 +260,26 @@ t.test("what is typed is the program's query, and each term is said as it was re
 	t.has(words, "has")
 	-- The word is drawn apart in the cells it is in, where it was found.
 	t.has(words, "CrashLoopBackOff")
+end)
+
+t.test("a word held at a cell's start, and terms that are either, are said as they were read", function()
+	local k, program = opened()
+	program.terms = {
+		{
+			kind = "any",
+			from = 0,
+			to = 13,
+			terms = {
+				{ kind = "text", text = "web", negate = false, at = "start", from = 0, to = 4 },
+				{ kind = "text", text = "1", negate = true, at = "end", from = 7, to = 10 },
+			},
+		},
+	}
+	act(k, { type = "text", field = "query", text = "^web | !1$" })
+	local words = texts(k)
+	t.has(words, "a cell starts with")
+	t.has(words, "or")
+	t.has(words, "no cell ends with")
 end)
 
 t.test("Esc clears the query, then asks before dropping marks, then sends nothing", function()

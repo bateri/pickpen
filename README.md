@@ -36,6 +36,8 @@ quantities are compared as quantities:
 | you type                  | the rows kept                                            |
 | ------------------------- | -------------------------------------------------------- |
 | `web !canary`             | hold `web`, in any column, in any case, and not `canary` |
+| `^web` `.log$` `^web$`    | have a cell that starts with `web`, ends with it, is it  |
+| `web \| api`              | hold either: a `\|` alone joins the terms on its sides   |
 | `STATUS=Running\|Pending` | whose `STATUS` is one of them (`!=` for none of them)    |
 | `NAME~api` `NAME!~api`    | whose `NAME` holds `api`, or does not                    |
 | `cpu>50` `size>=1G`       | `%CPU` above 50, a size of a gigabyte or more            |
