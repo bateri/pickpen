@@ -72,8 +72,7 @@ local function preview_tab(width)
 		:min_h(0)
 		:px(12)
 		:py(8)
-		:scroll_y(L.ui:scroll_offset("preview"))
-		:scroll_x(L.ui:scroll_offset_x("preview"))
+		:scroll()
 		:text_size(12)
 		:opacity(S.preview_waiting and 0.6 or 1)
 	if p then
@@ -122,7 +121,7 @@ local function row_tab(width)
 		return preview_tab(width)
 	end
 	local row = A.row(S.cursor)
-	local list = b.div():id("panel"):col():w(width):grow(1):min_h(0):py(6):scroll_y(L.ui:scroll_offset("panel"))
+	local list = b.div():id("panel"):col():w(width):grow(1):min_h(0):py(6):scroll()
 	if row == nil then
 		return list
 	end
@@ -275,7 +274,7 @@ local function column_tab(width)
 	local facet = S.facet
 	local columns = S.sum.columns
 	local column = math.clamp(S.column, 1, math.max(#columns, 1))
-	local list = b.div():id("panel"):col():w(width):grow(1):min_h(0):py(8):scroll_y(L.ui:scroll_offset("panel"))
+	local list = b.div():id("panel"):col():w(width):grow(1):min_h(0):py(8):scroll()
 	if #columns == 0 then
 		return list
 	end
@@ -324,7 +323,7 @@ end
 local function output_tab(width)
 	A.want_output()
 	local out = S.output
-	local list = b.div():id("panel"):col():w(width):grow(1):min_h(0):scroll_y(L.ui:scroll_offset("panel"))
+	local list = b.div():id("panel"):col():w(width):grow(1):min_h(0):scroll()
 	if out == nil then
 		return list
 	end
@@ -428,7 +427,7 @@ local function output_tab(width)
 		:bg("background")
 		:border(1, L.line2)
 		:min_h(34)
-		:scroll_x(L.ui:scroll_offset_x("out"))
+		:scroll()
 	local lines = 0
 	for line in string.gmatch(out.text, "([^\n]*)\n") do
 		lines += 1

@@ -161,7 +161,7 @@ function A.take(sum, from_top)
 			S.cursor = sum.shown > 0 and 1 or nil
 			S.cursor_id = nil
 			S.follow, S.unseen, S.relocate = false, 0, false
-			L.ui:set_scroll("rows", 0)
+			L.scroll_to("rows", 0)
 		elseif S.cursor_id ~= nil then
 			-- Rows taken into their places as they come: the cursor stays on its row, wherever it went.
 			S.relocate = true
@@ -180,7 +180,7 @@ function A.take(sum, from_top)
 		S.cursor = sum.shown > 0 and 1 or nil
 		S.cursor_id = nil
 		S.follow, S.unseen = false, 0
-		L.ui:set_scroll("rows", 0)
+		L.scroll_to("rows", 0)
 	end
 	if S.cursor == nil and sum.shown > 0 then
 		S.cursor = 1

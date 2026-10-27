@@ -92,7 +92,8 @@ Kit.__index = Kit
 
 -- A kit with the page at `page_path` started in it.
 function M.start(prelude_dir, page_path)
-	local self = setmetatable({ sent = {}, taken = 0, hit_id = nil, extents = {}, bounds_of = {} }, Kit)
+	local self =
+		setmetatable({ sent = {}, taken = 0, hit_id = nil, extents = {}, bounds_of = {}, offsets = {}, asks = {} }, Kit)
 	-- What the host gives the interpreter, before the prelude takes it over.
 	local globals = {
 		send = function(text)
@@ -111,18 +112,25 @@ function M.start(prelude_dir, page_path)
 		scroll_extent = function(id)
 			local extent = self.extents[id]
 			if extent then
-				-- A test says how far a box reaches down, and across; unsaid, across it reaches no further than it is.
+				-- A test says how far a box reaches down, and across; unsaid, across it reaches no
+				-- further than it is. How far it is scrolled is the stand-in host's.
 				local content_w, view_w = extent.content_w or 0, extent.view_w or 0
+				local at = self.offsets[id] or { x = 0, y = 0 }
 				return {
 					content = extent.content,
 					view = extent.view,
 					content_w = content_w,
 					view_w = view_w,
-					max_offset = extent.max_offset or math.max(0, extent.content - extent.view),
-					max_offset_x = math.max(0, content_w - view_w),
+					offset = at.y,
+					offset_x = at.x,
 				}
 			end
 			return nil
+		end,
+		-- The host does what the page asks at once, within the box's reach where the test said it.
+		scroll_to = function(id, x, y, animate)
+			self.asks[#self.asks + 1] = { id = id, x = x, y = y, animate = animate }
+			self:move_to(id, x, y)
 		end,
 		focus_order = function()
 			return {}
@@ -158,9 +166,35 @@ function Kit:render(width, height, now)
 	return root, animating, wake
 end
 
+-- The host laid the page out: what depends on the layout is brought within it. Whether the page
+-- wants to be rendered again.
+function Kit:settle()
+	return pencere.settle()
+end
+
 function Kit:event(event)
 	event.mods = event.mods or {}
 	return pencere.handle(event)
+end
+
+-- The host has the box `id` at `x` across and `y` down (nil: where it is), within its reach.
+function Kit:move_to(id, x, y)
+	local at = self.offsets[id] or { x = 0, y = 0 }
+	local extent = self.extents[id]
+	local reach_y = extent and math.max(0, extent.content - extent.view) or math.huge
+	local reach_x = extent and math.max(0, (extent.content_w or 0) - (extent.view_w or 0)) or math.huge
+	self.offsets[id] = {
+		x = math.clamp(x or at.x, 0, reach_x),
+		y = math.clamp(y or at.y, 0, reach_y),
+	}
+end
+
+-- The wheel over the box `id`: the host scrolls it by `dx` and `dy`, and tells the page where it went.
+function Kit:wheel(id, dx, dy)
+	local at = self.offsets[id] or { x = 0, y = 0 }
+	self:move_to(id, at.x + (dx or 0), at.y + (dy or 0))
+	local now = self.offsets[id]
+	return self:event({ type = "scrolled", boxes = { { id = id, x = now.x, y = now.y } } })
 end
 
 function Kit:key(name, mods)
