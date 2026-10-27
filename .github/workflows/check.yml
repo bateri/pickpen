@@ -19,7 +19,7 @@ permissions:
 
 env:
   # The commit of pencere the stand-in terminal is built from.
-  PENCERE_REF: 3ac15cb342e1469423222b0afa733070f36181ac
+  PENCERE_REF: 262a9a3a576398bb31d609309facefecf944ca10
 
 jobs:
   check:
