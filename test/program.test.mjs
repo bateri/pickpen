@@ -250,6 +250,31 @@ test("--delimiter, --read0 and --print0: a view sending what --where matches wri
   assert.equal(results(log).at(-2).again.line, "pickpen --delimiter : --where '2>10' --print0");
 });
 
+test("--fuzzy: plain words are their letters in order, and the rows go best match first", async () => {
+  const input = "xquery\nsrc/query.rs\nq-u-e-r-y\nnothing\nyreuq\n";
+  const headless = await run(["--where", "query", "--fuzzy"], input);
+  assert.equal(headless.status, 0, headless.err);
+  assert.equal(headless.out, "src/query.rs\nq-u-e-r-y\nxquery\n");
+  const shown = pane(`printf ${q(input)} | pickpen --fuzzy`, [
+    ["boot", {}],
+    ["query", { query: "query" }],
+    ["mark_shown", { on: true }],
+    ["output", {}],
+    ["choose", { marked: true }],
+  ]);
+  assert.equal(shown.status, 0, shown.err);
+  assert.equal(shown.out, headless.out);
+  assert.equal(results(shown.log).at(-2).again.line, "pickpen --where query --fuzzy");
+  // Turned off in the view, a word is what it was.
+  const exact = pane(`printf ${q(input)} | pickpen --fuzzy`, [
+    ["boot", {}],
+    ["fuzzy", { on: false }],
+    ["query", { query: "query" }],
+    ["cancel", {}],
+  ]);
+  assert.equal(results(exact.log).at(-2).shown, 2);
+});
+
 test("the output panel shows what goes out, and the command line that does it again", () => {
   const { log } = pane(`pickpen --field NAME ${q(`${DEMO}pods.txt`)}`, [
     ["boot", {}],

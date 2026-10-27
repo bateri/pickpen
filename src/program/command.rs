@@ -11,6 +11,8 @@ pub struct Recipe {
     pub delimiter: Option<String>,
     pub read0: bool,
     pub where_: String,
+    /// `--fuzzy`, as the view had it when the command was made.
+    pub fuzzy: bool,
     /// The column and whether the order is the other way.
     pub sort: Option<(String, bool)>,
     pub field: Option<Vec<String>>,
@@ -44,6 +46,9 @@ pub fn command_line(recipe: &Recipe) -> String {
     }
     words.push("--where".to_string());
     words.push(shell_quote(crate::values::js_trim(&recipe.where_)));
+    if recipe.fuzzy {
+        words.push("--fuzzy".to_string());
+    }
     if let Some((column, descending)) = &recipe.sort {
         words.push("--sort".to_string());
         words.push(shell_quote(&format!(
@@ -101,11 +106,12 @@ mod tests {
                 delimiter: Some(":".to_string()),
                 read0: true,
                 where_: "2>10".to_string(),
+                fuzzy: true,
                 field: Some(vec!["1".to_string()]),
                 print0: true,
                 ..Recipe::default()
             }),
-            "pickpen --delimiter : --read0 --where '2>10' --field 1 --print0"
+            "pickpen --delimiter : --read0 --where '2>10' --fuzzy --field 1 --print0"
         );
     }
 }

@@ -69,24 +69,70 @@ function R.columns()
 	return out, math.max(total, R.view.w)
 end
 
--- The words of the query, for drawing where they are in each cell: longest first. Those of either
--- side of a `|` are drawn too, and one held at a cell's start or end wherever it is.
+-- The words of the query, for drawing where they are in each cell: those looked for as they are
+-- (`exact`, longest first) and those looked for letter by letter (`fuzzy`). Those of either side
+-- of a `|` are drawn too, and one held at a cell's start or end wherever it is.
 local function words_of()
-	local words = {}
+	local words = { exact = {}, fuzzy = {} }
 	local function add(terms)
 		for _, term in ipairs(terms) do
 			if term.kind == "any" then
 				add(term.terms)
 			elseif term.kind == "text" and not term.negate and term.text ~= "" then
-				words[#words + 1] = string.lower(term.text)
+				local into = term.fuzzy and words.fuzzy or words.exact
+				into[#into + 1] = string.lower(term.text)
 			end
 		end
 	end
 	add(S.terms)
-	table.sort(words, function(x, y)
+	table.sort(words.exact, function(x, y)
 		return #x > #y
 	end)
 	return words
+end
+
+-- Lights the bytes of `lit` where a fuzzy word's letters are in a cell, as the program finds them:
+-- where they first all are, from as late a first letter as that allows. `chars` are the cell's
+-- characters in lower case, each with its code and its bytes. The program looks across the row's
+-- cells; here a word is drawn only in a cell that holds all its letters.
+local function light_fuzzy(chars, pattern, lit)
+	local wanted = {}
+	for _, code in utf8.codes(pattern) do
+		wanted[#wanted + 1] = code
+	end
+	local k, last = 1, nil
+	for i, char in ipairs(chars) do
+		if char.code == wanted[k] then
+			if k == #wanted then
+				last = i
+				break
+			end
+			k += 1
+		end
+	end
+	if last == nil then
+		return
+	end
+	local first = last
+	k = #wanted
+	for i = last, 1, -1 do
+		if chars[i].code == wanted[k] then
+			if k == 1 then
+				first = i
+				break
+			end
+			k -= 1
+		end
+	end
+	k = 1
+	for i = first, last do
+		if chars[i].code == wanted[k] then
+			for byte = chars[i].from, chars[i].to do
+				lit[byte] = true
+			end
+			k += 1
+		end
+	end
 end
 
 local function cell_of(text, width, words, quantity, ink)
@@ -95,15 +141,16 @@ local function cell_of(text, width, words, quantity, ink)
 	if quantity then
 		box:justify_end()
 	end
-	if #words == 0 or shown == "" then
+	if (#words.exact == 0 and #words.fuzzy == 0) or shown == "" then
 		return box:child(T(shown, ink):truncate():min_w(0))
 	end
 	local lower = string.lower(shown)
+	-- The bytes drawn apart: each word where it is, the first found first.
+	local lit = {}
 	local at = 1
-	local any = false
 	while at <= #shown do
 		local best, length = nil, 0
-		for _, word in ipairs(words) do
+		for _, word in ipairs(words.exact) do
 			local found = string.find(lower, word, at, true)
 			if found and (best == nil or found < best) then
 				best, length = found, #word
@@ -112,18 +159,39 @@ local function cell_of(text, width, words, quantity, ink)
 		if best == nil then
 			break
 		end
-		any = true
-		if best > at then
-			box:child(T(string.sub(shown, at, best - 1), ink):no_shrink())
+		for byte = best, best + length - 1 do
+			lit[byte] = true
 		end
-		box:child(b.div():rounded(2):bg(L.match):no_shrink():child(T(string.sub(shown, best, best + length - 1), ink)))
 		at = best + length
 	end
-	if not any then
+	if #words.fuzzy > 0 then
+		local chars = {}
+		for from, code in utf8.codes(lower) do
+			chars[#chars + 1] = { from = from, code = code }
+		end
+		for i, char in ipairs(chars) do
+			char.to = (chars[i + 1] and chars[i + 1].from or #lower + 1) - 1
+		end
+		for _, pattern in ipairs(words.fuzzy) do
+			light_fuzzy(chars, pattern, lit)
+		end
+	end
+	if next(lit) == nil then
 		return box:child(T(shown, ink):truncate():min_w(0))
 	end
-	if at <= #shown then
-		box:child(T(string.sub(shown, at), ink):truncate():min_w(0))
+	local from = 1
+	for byte = 2, #shown + 1 do
+		if byte > #shown or (lit[byte] == true) ~= (lit[from] == true) then
+			local piece = string.sub(shown, from, byte - 1)
+			if lit[from] then
+				box:child(b.div():rounded(2):bg(L.match):no_shrink():child(T(piece, ink)))
+			elseif byte > #shown then
+				box:child(T(piece, ink):truncate():min_w(0))
+			else
+				box:child(T(piece, ink):no_shrink())
+			end
+			from = byte
+		end
 	end
 	return box
 end

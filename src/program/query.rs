@@ -17,6 +17,10 @@
 //!   a | b           either term holds: a `|` alone joins the terms on its two sides
 //! ```
 //!
+//! With `--fuzzy`, a word that is only a word (not `!word`, `^word`, `word$` nor quoted) is
+//! looked for letter by letter, in order, with anything between (`fzy` finds `fuzzy`), and the rows
+//! it finds are put best first (`fuzzy_score`) unless they are ordered by a column.
+//!
 //! Every term must hold. A column is named as its heading is, in any case, or with only its
 //! letters and digits (`cpu` for `%CPU`, `containerid` for `CONTAINER ID`). A name that is no
 //! column's makes the whole term a word: `user=bob` searches lines for `user=bob`.
@@ -132,6 +136,8 @@ pub enum Term {
         text: String,
         negate: bool,
         at: At,
+        /// Looked for letter by letter (`--fuzzy`): never with `negate` or an `at`.
+        fuzzy: bool,
         from: usize,
         to: usize,
     },
@@ -192,6 +198,33 @@ impl Default for Query {
 }
 
 impl Query {
+    /// Whether the rows it keeps are put best first: it has a fuzzy word.
+    pub fn ranks(&self) -> bool {
+        fn fuzzy(term: &Term) -> bool {
+            match term {
+                Term::Text { fuzzy, .. } => *fuzzy,
+                Term::Any { terms, .. } => terms.iter().any(fuzzy),
+                Term::Field { .. } => false,
+            }
+        }
+        self.terms.iter().any(fuzzy)
+    }
+
+    /// How well a row it keeps matches it, `lower` what `lower_of` makes of the row: the scores of
+    /// its fuzzy words, the best of those either side of a `|`.
+    pub fn score(&self, lower: &str) -> u32 {
+        fn of(term: &Term, lower: &str) -> u32 {
+            match term {
+                Term::Text {
+                    text, fuzzy: true, ..
+                } => fuzzy_score(lower, text).unwrap_or(0),
+                Term::Any { terms, .. } => terms.iter().map(|t| of(t, lower)).max().unwrap_or(0),
+                _ => 0,
+            }
+        }
+        self.terms.iter().map(|t| of(t, lower)).sum()
+    }
+
     /// The query without its terms on `column`: what a column's values are counted on, so that the
     /// panel shows the values the person could choose, not only the one they did.
     pub fn without_column(&self, column: usize) -> Self {
@@ -381,7 +414,7 @@ fn last_unquoted(raw: &str) -> bool {
 }
 
 /// One token as a term: a comparison of a column, a word, or nothing (a word with no text).
-fn term_of(token: &Token<'_>, columns: &[String]) -> Option<Term> {
+fn term_of(token: &Token<'_>, columns: &[String], fuzzy: bool) -> Option<Term> {
     if let Some((at, op)) = find_operator(token.raw).filter(|(at, _)| *at > 0) {
         let name = unquote(&token.raw[..at]);
         if let Some(column) = column_named(columns, &name) {
@@ -437,9 +470,11 @@ fn term_of(token: &Token<'_>, columns: &[String]) -> Option<Term> {
     if text.is_empty() {
         return None;
     }
+    let plain = !negate && !start && !end && !token.raw.contains(['"', '\'']);
     Some(Term::Text {
         text: text.to_lowercase(),
         negate,
+        fuzzy: fuzzy && plain,
         at: match (start, end) {
             (false, false) => At::Anywhere,
             (true, false) => At::Start,
@@ -452,6 +487,11 @@ fn term_of(token: &Token<'_>, columns: &[String]) -> Option<Term> {
 }
 
 pub fn parse(source: &str, columns: &[String]) -> Query {
+    parse_as(source, columns, false)
+}
+
+/// The query, its plain words fuzzy with `fuzzy` (`--fuzzy`).
+pub fn parse_as(source: &str, columns: &[String], fuzzy: bool) -> Query {
     let mut terms: Vec<Term> = Vec::new();
     // A `|` alone came after the last term: the next one is its other side.
     let mut join = false;
@@ -460,7 +500,7 @@ pub fn parse(source: &str, columns: &[String]) -> Query {
             join = !terms.is_empty();
             continue;
         }
-        let Some(term) = term_of(&token, columns) else {
+        let Some(term) = term_of(&token, columns, fuzzy) else {
             continue;
         };
         let last = if join { terms.pop() } else { None };
@@ -739,6 +779,9 @@ fn has_word(lower: &str, text: &str, at: At) -> bool {
 fn holds(term: &Term, cells: &[String], lower: &str) -> bool {
     let (column, op, term) = match term {
         Term::Text {
+            text, fuzzy: true, ..
+        } => return fuzzy_end(lower, text).is_some(),
+        Term::Text {
             text, negate, at, ..
         } => return has_word(lower, text, *at) != *negate,
         Term::Any { terms, .. } => return terms.iter().any(|t| holds(t, cells, lower)),
@@ -781,6 +824,73 @@ fn holds(term: &Term, cells: &[String], lower: &str) -> bool {
             }
         }
     }
+}
+
+/// What a fuzzy match is worth, as fzf's first algorithm counts it: each letter found, more at the
+/// start of a word (after anything not a letter or a digit) and twice that for the first letter,
+/// and less for each letter between them.
+const MATCHED: i32 = 16;
+const AT_WORD: i32 = 8;
+const FOLLOWING: i32 = 4;
+const GAP_STARTS: i32 = -3;
+const GAP_GOES_ON: i32 = -1;
+
+/// Where the letters of `pattern` are first all found in `text`, in order: the end of the last.
+fn fuzzy_end(text: &str, pattern: &str) -> Option<usize> {
+    let mut wanted = pattern.chars().peekable();
+    for (at, c) in text.char_indices() {
+        if wanted.peek() == Some(&c) {
+            wanted.next();
+            if wanted.peek().is_none() {
+                return Some(at + c.len_utf8());
+            }
+        }
+    }
+    None
+}
+
+/// How well the letters of `pattern` are found in `text`, in order with anything between them;
+/// none when they are not. They are taken where they first all are, from as late a first letter as
+/// that allows, so that the stretch is as short as it can be (fzf's first algorithm), and the
+/// stretch is scored: letters that start a word, and letters that follow one another, count more
+/// (a run counts each of its letters as much as its first), and what lies between counts less.
+pub fn fuzzy_score(text: &str, pattern: &str) -> Option<u32> {
+    let end = fuzzy_end(text, pattern)?;
+    let mut wanted = pattern.chars().rev().peekable();
+    let mut start = 0;
+    for (at, c) in text[..end].char_indices().rev() {
+        if wanted.peek() == Some(&c) {
+            wanted.next();
+            if wanted.peek().is_none() {
+                start = at;
+                break;
+            }
+        }
+    }
+    let word_start = |before: Option<char>| before.is_none_or(|c| !c.is_alphanumeric());
+    let mut before = text[..start].chars().next_back();
+    let mut wanted = pattern.chars().peekable();
+    let (mut score, mut first, mut run, mut gap) = (0, true, None::<i32>, 0);
+    for c in text[start..end].chars() {
+        if wanted.peek() == Some(&c) {
+            wanted.next();
+            let own = if word_start(before) { AT_WORD } else { 0 };
+            let bonus = match run {
+                Some(run_bonus) => own.max(run_bonus).max(FOLLOWING),
+                None => own,
+            };
+            run.get_or_insert(own);
+            score += MATCHED + if first { 2 * bonus } else { bonus };
+            first = false;
+            gap = 0;
+        } else {
+            score += if gap == 0 { GAP_STARTS } else { GAP_GOES_ON };
+            gap += 1;
+            run = None;
+        }
+        before = Some(c);
+    }
+    Some(score.max(1) as u32)
 }
 
 /// Whether a row holds every term: `cells` are its cells, `lower` what `lower_of` makes of them.

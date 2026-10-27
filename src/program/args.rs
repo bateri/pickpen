@@ -18,6 +18,8 @@ you choose in the terminal pane, and the rows you chose go out on stdout.
   kubectl get pods | pickpen --where 'STATUS!=Running' --confirm --field NAME
 
   -q, --query QUERY      start with QUERY typed
+  -z, --fuzzy            plain words of the query match their letters in order,
+                         gaps allowed (fzy finds fuzzy), best matches first
   -w, --where QUERY      no view: write the rows QUERY matches, as grep would
   -c, --confirm          a person confirms: the rows --where matches are marked,
                          and only marked rows go out
@@ -72,6 +74,8 @@ pub struct Run {
     /// The file to read, or none for stdin (`-` is stdin too).
     pub file: Option<String>,
     pub query: String,
+    /// `--fuzzy`: the query's plain words match letter by letter, and the rows go best first.
+    pub fuzzy: bool,
     pub where_: Option<String>,
     pub confirm: bool,
     pub sort: Option<Sort>,
@@ -101,8 +105,9 @@ enum Kind {
 
 /// The options, as `parseArgs` was given them: long name, short name, kind, and whether it may
 /// be given more than once.
-const OPTIONS: [(&str, char, Kind, bool); 15] = [
+const OPTIONS: [(&str, char, Kind, bool); 16] = [
     ("query", 'q', Kind::Text, false),
+    ("fuzzy", 'z', Kind::Flag, false),
     ("where", 'w', Kind::Text, false),
     ("confirm", 'c', Kind::Flag, false),
     ("sort", 's', Kind::Text, false),
@@ -439,6 +444,7 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
     Ok(Parsed::Run(Run {
         file,
         query: values.text("query").unwrap_or_default(),
+        fuzzy: values.flag("fuzzy"),
         where_: values.text("where"),
         confirm: values.flag("confirm"),
         sort,

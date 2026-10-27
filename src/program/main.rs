@@ -111,7 +111,7 @@ fn choose(run: Run, stream: Box<dyn Read + Send>) -> ExitCode {
     } else {
         None
     };
-    let shared = Shared::new(Picker::new(&run.query, rule));
+    let shared = Shared::new(Picker::new(&run.query, rule, run.fuzzy));
     let feed = shared.clone();
     let cut = run.cut.clone();
     std::thread::spawn(move || {

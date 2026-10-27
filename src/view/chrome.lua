@@ -60,7 +60,12 @@ local function chip(index, term)
 				say(one)
 			end
 		elseif t.kind == "text" then
-			op((t.negate and AT_NOT or AT)[t.at] or (t.negate and "without" or "has"))
+			if t.fuzzy then
+				-- Its letters in order, with anything between them.
+				op("like")
+			else
+				op((t.negate and AT_NOT or AT)[t.at] or (t.negate and "without" or "has"))
+			end
 			value(t.text)
 		else
 			box:child(T(L.cut(t.name, 40), "accent", nil, 600))
@@ -349,6 +354,7 @@ local QUERY = {
 	{ "cpu>50  size>=1G  age<2h", "quantities compare as quantities" },
 	{ "latency=100..400", "between, both ends included" },
 	{ "web | api", "either: a | alone joins the terms on its two sides" },
+	{ "fzy", "with fuzzy words (--fuzzy, or ⌘K): its letters in order, best first" },
 }
 
 local function help_row(what, does, code)

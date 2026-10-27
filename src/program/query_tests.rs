@@ -213,3 +213,39 @@ fn a_word_may_be_at_a_cells_start_or_end_and_terms_joined_by_a_bar_are_either() 
     assert_eq!((q.terms[0].from(), q.terms[0].to()), (0, 6));
     assert!(matches!(&q.terms[0], Term::Any { terms, .. } if terms.len() == 2));
 }
+
+fn keep_fuzzy(query: &str) -> Vec<String> {
+    let parsed = parse_as(query, &columns(), true);
+    rows()
+        .into_iter()
+        .filter(|r| row_matches(&parsed, r))
+        .map(|r| r.cells[0].clone())
+        .collect()
+}
+
+#[test]
+fn with_fuzzy_a_plain_word_is_its_letters_in_order_and_the_best_match_scores_most() {
+    let none: [&str; 0] = [];
+    assert_eq!(keep_fuzzy("crshlp"), ["web-2"]);
+    assert_eq!(keep_fuzzy("wbrun"), ["web-1"]);
+    assert_eq!(keep_fuzzy("dbrun"), ["db-1"]);
+    assert_eq!(keep_fuzzy("crshlp STATUS=Running"), none);
+    // A word that is more than a word is as it was: quoted, !word, ^word, word$.
+    assert_eq!(keep_fuzzy("\"wb\""), none);
+    assert_eq!(keep_fuzzy("!wb"), ["web-1", "web-2", "db-1", "cache"]);
+    assert_eq!(keep_fuzzy("^wb"), none);
+    assert_eq!(keep_fuzzy("^web"), ["web-1", "web-2"]);
+    assert!(parse_as("wb", &columns(), true).ranks());
+    assert!(parse_as("x | wb", &columns(), true).ranks());
+    assert!(!parse_as("\"wb\" STATUS=x", &columns(), true).ranks());
+    assert!(!parse("wb", &columns()).ranks());
+
+    assert_eq!(fuzzy_score("abc", "acb"), None);
+    // A word's start, and letters that follow one another, count more.
+    let query = |text: &str| fuzzy_score(text, "query").unwrap();
+    assert!(query("src/query.rs") > query("q-u-e-r-y"));
+    assert!(query("q-u-e-r-y") > query("xquery"));
+    assert!(query("xquery") > query("qxuxexrxy"));
+    let q = parse_as("query", &[], true);
+    assert_eq!(q.score("src/query.rs"), query("src/query.rs"));
+}

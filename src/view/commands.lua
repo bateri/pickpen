@@ -310,7 +310,8 @@ function C.open_palette()
 	S.out.keyboard = { field = "palette" }
 end
 
--- The palette's commands: the fixed ones and one for each thing a column offers.
+-- The palette's commands: the fixed ones, how words are looked for, and one for each thing a
+-- column offers.
 function C.palette_commands()
 	local out = {}
 	for _, command in ipairs(C.COMMANDS) do
@@ -318,6 +319,17 @@ function C.palette_commands()
 			out[#out + 1] = command
 		end
 	end
+	local fuzzy = S.sum and S.sum.fuzzy
+	out[#out + 1] = {
+		id = "fuzzy",
+		title = fuzzy and "Words as they are typed, not fuzzy"
+			or "Fuzzy words: their letters in order, best matches first",
+		also = "fzf fuzzy exact approximate letters",
+		group = "Order",
+		run = function()
+			A.set_fuzzy(not fuzzy)
+		end,
+	}
 	for column, name in ipairs(S.sum and S.sum.columns or {}) do
 		out[#out + 1] = {
 			id = "sort:" .. column,

@@ -48,6 +48,10 @@ A column is named as its heading is, or by its letters alone (`cpu` for `%CPU`).
 each term says how it was read — `STATUS is not Running`, `has web` — and a click takes it out. A
 name that is no column's is looked for as a word, and the view says so.
 
+With `--fuzzy`, or ⌘K's _Fuzzy words_, a plain word is its letters in order with anything between
+them, as in fzf — `sqr` finds `src/query.rs` — and the rows come best match first, unless they are
+ordered by a column. A quoted word, `!word`, `^word` and `word$` stay as they are typed.
+
 **The mouse writes the query too.** Right-click a cell for _only rows where STATUS is
 CrashLoopBackOff_; click a value in a column's panel, ⌘-click another to keep either; drag across
 the chart of a column's numbers to keep a range. Each of these writes its term into the query,

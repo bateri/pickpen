@@ -84,6 +84,8 @@ pub struct Picker {
     marked_shown: usize,
     /// `--where` with `--confirm`: the rule rows are marked by as they come.
     rule_text: Option<String>,
+    /// `--fuzzy`, or the palette's: plain words are looked for letter by letter, best first.
+    pub fuzzy: bool,
     rule: Option<Query>,
     /// Moves when the rows shown are other rows or in another order.
     pub layout: u64,
@@ -107,11 +109,12 @@ pub fn cut(text: &str, most: usize) -> &str {
 }
 
 impl Picker {
-    pub fn new(query_text: &str, rule: Option<&str>) -> Self {
+    pub fn new(query_text: &str, rule: Option<&str>, fuzzy: bool) -> Self {
         Self {
             query_text: query_text.to_owned(),
-            query: query::parse(query_text, &[]),
+            query: query::parse_as(query_text, &[], fuzzy),
             rule_text: rule.map(str::to_owned),
+            fuzzy,
             ..Self::default()
         }
     }
@@ -135,9 +138,9 @@ impl Picker {
         if heading.is_some() {
             self.heading = heading;
         }
-        self.query = query::parse(&self.query_text, &self.names);
+        self.query = query::parse_as(&self.query_text, &self.names, self.fuzzy);
         if let Some(rule) = &self.rule_text {
-            self.rule = Some(query::parse(rule, &self.names));
+            self.rule = Some(query::parse_as(rule, &self.names, self.fuzzy));
         }
         if let Some(order) = self.order
             && order.column >= self.names.len()
@@ -181,7 +184,7 @@ impl Picker {
             self.read_columns();
         }
         if matches {
-            if self.order.is_some() {
+            if self.order.is_some() || self.query.ranks() {
                 self.resort_due.get_or_insert_with(Instant::now);
             } else {
                 self.place[id] = self.shown.len() as u32;
@@ -320,9 +323,18 @@ impl Picker {
         keys
     }
 
-    /// The ids in the order shown; ties keep the input's order.
+    /// The ids in the order shown: by the column ordered by, or, with fuzzy words and no order,
+    /// best match first; ties keep the input's order.
     fn sort_ids(&mut self, ids: &mut [u32]) {
-        let Some(order) = self.order else { return };
+        let Some(order) = self.order else {
+            if self.query.ranks() {
+                let (query, lower) = (&self.query, &self.lower);
+                ids.sort_by_cached_key(|&id| {
+                    (std::cmp::Reverse(query.score(&lower[id as usize])), id)
+                });
+            }
+            return;
+        };
         if order.column >= self.names.len() {
             return;
         }
@@ -360,8 +372,18 @@ impl Picker {
 
     pub fn set_query(&mut self, text: &str) {
         self.query_text = text.to_owned();
-        self.query = query::parse(text, &self.names);
+        self.query = query::parse_as(text, &self.names, self.fuzzy);
         self.refilter();
+    }
+
+    /// Plain words looked for letter by letter, best first, or as they are typed.
+    pub fn set_fuzzy(&mut self, fuzzy: bool) {
+        self.fuzzy = fuzzy;
+        if let Some(rule) = &self.rule_text {
+            self.rule = Some(query::parse_as(rule, &self.names, fuzzy));
+        }
+        let text = self.query_text.clone();
+        self.set_query(&text);
     }
 
     pub fn set_order(&mut self, order: Option<Order>) {
@@ -539,10 +561,11 @@ impl Picker {
                 text,
                 negate,
                 at,
+                fuzzy,
                 from,
                 to,
             } => {
-                json!({ "kind": "text", "text": text, "negate": negate, "at": at.name(), "from": from, "to": to })
+                json!({ "kind": "text", "text": text, "negate": negate, "at": at.name(), "fuzzy": fuzzy, "from": from, "to": to })
             }
             Term::Any { terms, from, to } => {
                 let terms: Vec<Value> = terms.iter().map(|t| self.term_json(t)).collect();
@@ -597,6 +620,7 @@ impl Picker {
             "placeholder": self.placeholder,
             "problem": self.problems.last(),
             "terms": self.terms_json(),
+            "fuzzy": self.fuzzy,
             "unknown": query::unknown_names(&self.query_text, &self.names),
         })
     }

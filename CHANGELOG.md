@@ -19,6 +19,8 @@ change what the previous one did.
   end, `a | b` for either, and columns compared by their headings, with sizes, lengths of time,
   dates and numbers compared as such (`cpu>50`, `age<2h`, `size>1G`, `ms=100..400`); each term
   shown as it was read, and taken out with a click.
+- `--fuzzy` (and its command in the palette): a plain word is its letters in order, gaps allowed,
+  and the rows go best match first unless ordered by a column; quoted words stay as typed.
 - Marking with the keyboard (`Tab`, `⇧↑` `⇧↓`, `⌘A`) and the mouse (the boxes, a drag down them,
   ⌘- and ⇧-click), ordering by any column, a palette of every command (`⌘K`) and the keys on one
   page (`F1`).

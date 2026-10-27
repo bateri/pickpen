@@ -104,8 +104,12 @@ impl Headless<'_> {
         }
     }
 
+    /// Whether rows go out as they come: not when they are put in an order first, a column's or,
+    /// with fuzzy words, best match first.
     fn one_by_one(&self) -> bool {
-        self.run.sort.is_none() && output::streams(&self.run.shape, self.format)
+        self.run.sort.is_none()
+            && !self.query.as_ref().is_some_and(Query::ranks)
+            && output::streams(&self.run.shape, self.format)
     }
 }
 
@@ -127,7 +131,7 @@ impl Sink for Headless<'_> {
         if heading.is_some() {
             self.heading = heading;
         }
-        self.query = Some(query::parse(&self.where_, &self.names));
+        self.query = Some(query::parse_as(&self.where_, &self.names, self.run.fuzzy));
         if let Some(problem) = output::problem_of(&self.run.shape, &self.names) {
             self.stop.get_or_insert((64, problem));
         }
@@ -150,7 +154,7 @@ impl Sink for Headless<'_> {
         }
         let query = self
             .query
-            .get_or_insert_with(|| query::parse(&self.where_, &self.names));
+            .get_or_insert_with(|| query::parse_as(&self.where_, &self.names, self.run.fuzzy));
         if !query::matches(query, &record.cells, &query::lower_of(&record.cells)) {
             return;
         }
@@ -254,6 +258,11 @@ pub fn run(run: &Run, stream: Box<dyn Read + Send>) -> ExitCode {
                 .collect();
             keyed.sort_by(|a, b| query::compare_ordered(&a.0, &b.0, sort.descending));
             held = keyed.into_iter().map(|(_, record)| record).collect();
+        } else if let Some(query) = headless.query.as_ref().filter(|q| q.ranks()) {
+            // Best match first, as the view puts them; ties in the input's order.
+            held.sort_by_cached_key(|record| {
+                std::cmp::Reverse(query.score(&query::lower_of(&record.cells)))
+            });
         }
         let records: Vec<&Record> = held.iter().collect();
         rest = output::render(&records, &run.shape, &headless.source(), run.print0);

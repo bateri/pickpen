@@ -324,6 +324,15 @@ function A.term(params)
 	A.keep_keyboard()
 end
 
+-- Plain words looked for letter by letter, best matches first (`--fuzzy`), or as they are typed.
+function A.set_fuzzy(on)
+	ask("fuzzy", { on = on }, function(sum)
+		sum.query = nil
+		A.take(sum, true)
+		A.toast(on and "Fuzzy words: their letters in order, best first" or "Words as they are typed")
+	end)
+end
+
 function A.set_order(order)
 	S.order = order
 	if order then

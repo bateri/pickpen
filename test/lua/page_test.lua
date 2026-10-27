@@ -79,6 +79,7 @@ function Program:summary()
 			{ kind = "text", text = self.query, negate = false, at = "anywhere", from = 0, to = #self.query },
 		},
 		unknown = {},
+		fuzzy = self.fuzzy == true,
 	}
 end
 
@@ -167,6 +168,11 @@ function Program:answer(method, params)
 	elseif method == "choose" then
 		self.chosen = params
 		return { sent = 1 }
+	elseif method == "fuzzy" then
+		self.fuzzy = params.on
+		local sum = self:summary()
+		sum.query = self.query
+		return sum
 	elseif method == "order" then
 		self:refilter()
 		local sum = self:summary()
@@ -356,6 +362,26 @@ t.test("⌘K is the palette: its field filters the commands, Enter runs one", fu
 	reply = key(k, "enter")
 	t.ok(k:last_call("unmark_all") ~= nil, "the command ran")
 	t.eq(reply.keyboard, { field = "query" })
+end)
+
+t.test("the palette turns fuzzy words on, and a fuzzy word is drawn letter by letter", function()
+	local k, program = opened()
+	key(k, "k", { command = true })
+	act(k, { type = "text", field = "palette", text = "fuzzy" })
+	t.has(texts(k), "Fuzzy words: their letters in order")
+	key(k, "enter")
+	t.eq(k:last_call("fuzzy").params.on, true)
+	program.terms = {
+		{ kind = "text", text = "cbo", negate = false, at = "anywhere", fuzzy = true, from = 0, to = 5 },
+	}
+	act(k, { type = "text", field = "query", text = "crash" })
+	local words = texts(k)
+	t.has(words, "like")
+	-- C, B and O of CrashLoopBackOff are drawn apart, and what is between them is not.
+	t.has(words, "rashLoop")
+	key(k, "k", { command = true })
+	act(k, { type = "text", field = "palette", text = "typed" })
+	t.has(texts(k), "Words as they are typed")
 end)
 
 t.test("F1 shows the keys, the mouse and the query, and Esc closes it", function()

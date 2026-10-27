@@ -108,6 +108,9 @@ fn the_options_are_read_as_they_were_given() {
     assert_eq!(o.preview.as_deref(), Some("echo {}"));
     assert_eq!(o.file.as_deref(), Some("-file"));
 
+    assert!(options(&["-z"]).fuzzy && options(&["--fuzzy"]).fuzzy);
+    assert!(!options(&[]).fuzzy);
+
     let o = options(&["-o", "jsonl", "-cw", "x"]);
     assert_eq!(o.shape, Shape::As(As::Jsonl));
     assert_eq!(o.given.output.as_deref(), Some("jsonl"));

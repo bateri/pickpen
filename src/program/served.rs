@@ -5,7 +5,8 @@
 //!
 //! - `boot`: how the command line set the view up, and the rows so far
 //! - the topic `table`: what the view is told of the rows, again whenever it changes
-//! - `query`, `order`, `term`: the rows shown, by what the person typed, the order, or a click
+//! - `query`, `order`, `term`, `fuzzy`: the rows shown, by what the person typed, the order, a
+//!   click, or how plain words are looked for
 //! - `window`: the rows at some places of those shown
 //! - `mark`, `mark_range`, `mark_shown`, `unmark_all`, `invert`, `mark_value`: the marks
 //! - `column`: a column's values and chart; `output`: what Send would write, and the command line
@@ -132,6 +133,7 @@ fn again(picker: &Picker, run: &Run, fields: Option<&[String]>) -> Value {
             delimiter: run.given.delimiter.clone(),
             read0: run.given.read0,
             where_: where_.to_owned(),
+            fuzzy: picker.fuzzy,
             sort: picker.order.map(|o| {
                 (
                     picker.names.get(o.column).cloned().unwrap_or_default(),
@@ -212,6 +214,7 @@ pub fn serve(
             "version": version,
             "title": r.title,
             "query": r.query,
+            "fuzzy": r.fuzzy,
             "where": r.where_,
             "confirm": r.confirm,
             "preview": r.preview,
@@ -296,6 +299,14 @@ pub fn serve(
         if text != picker.query_text || picker.resort_due.is_some() {
             picker.set_query(text);
         }
+        Ok(shown_now(&picker))
+    });
+
+    let s = shared.clone();
+    let options = options.call("fuzzy", move |params, _call: &Call| {
+        let mut picker = s.lock();
+        let on = params["on"].as_bool().unwrap_or(!picker.fuzzy);
+        picker.set_fuzzy(on);
         Ok(shown_now(&picker))
     });
 
