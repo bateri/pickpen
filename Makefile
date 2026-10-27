@@ -1,22 +1,30 @@
 # pickpen is one native file: a Rust program with its view (src/view/, a page of pencere's kit, and
 # src/assets/) carried in it. The gate and the steps of a release are here; RELEASING.md says in what
 # order and why.
-.PHONY: check fmt lint build test test-program test-page test-binary test-tools dist sums release-prepare rehearse demo
+.PHONY: check fmt lint pencere build dev test test-program test-page test-binary test-tools dist sums release-prepare rehearse demo
 
-# The view's tests run in pencere's Lua runner, the `pencere` command: a release of it, which
-# pencere's installer puts in ~/.local/bin (curl -fsSL https://raw.githubusercontent.com/bateri/pencere/main/cli/install.sh | sh;
-# PENCERE_VERSION=<it> for the version in tools/pencere-version), or one built in a pencere checkout
-# (cargo build --release -p pencere-cli). They run the view against the kit's own page API, the
-# prelude of a pencere checkout (PRELUDE). The stand-in terminal the end-to-end tests play pickpen in
-# has no release: it is built in a pencere checkout (cargo build -p pencere-fake-host). Where they
-# are not where the Makefile looks, say so:
+# pencere is what pickpen is built with, and tested with: the `pencere` crate the program is built
+# on, and from the same pencere, its `pencere` command (the Lua runner the view's tests run in, and
+# `pencere dev`), its stand-in terminal the end-to-end tests play pickpen in (pencere-fake-host) and
+# the prelude of its kit, the page API the view's tests hold the view to. Cargo.lock is the one place
+# it is pinned: a commit of pencere while pickpen needs what no release of it has, a release on
+# crates.io once one does (`node tools/release.mjs pencere-ref` says which, as a git ref).
 #
-#   make check PENCERE=../pencere/target/release/pencere \
-#              PRELUDE=../pencere/kit/luau/prelude \
-#              FAKE_HOST=../pencere/target/debug/pencere-fake-host
-PENCERE ?= $(shell command -v pencere 2>/dev/null || echo ../pencere/target/release/pencere)
-PRELUDE ?= ../pencere/kit/luau/prelude
-FAKE_HOST ?= ../pencere/target/debug/pencere-fake-host
+# The command, the stand-in and the prelude come from one checkout of pencere, PENCERE_SRC, built
+# there by `make pencere`, which the steps that need them run first. By default it is pencere at
+# that ref, fetched into .cache/pencere, so the gate holds pickpen to the pencere it is built with
+# and to nothing else, on any machine. To work against another checkout, a pencere you are
+# changing, say so; one that is not at Cargo.lock's ref is said to be so:
+#
+#   make dev PENCERE_SRC=../pencere
+PENCERE_REF = $(shell node tools/release.mjs pencere-ref)
+PENCERE_CACHE = .cache/pencere
+PENCERE_SRC ?= $(PENCERE_CACHE)
+PENCERE ?= $(PENCERE_SRC)/target/release/pencere
+FAKE_HOST ?= $(PENCERE_SRC)/target/release/pencere-fake-host
+PRELUDE ?= $(PENCERE_SRC)/kit/luau/prelude
+PENCERE_GIT = https://github.com/bateri/pencere
+
 # The Lua files are formatted with StyLua (cargo install stylua --locked --features luau).
 STYLUA ?= stylua
 
@@ -32,11 +40,40 @@ lint:
 	$(STYLUA) --check src/view test/lua
 	cargo clippy --locked --all-targets -- -D warnings
 
+# pencere makes PENCERE_SRC ready: fetched at Cargo.lock's ref when it is the cache, and the command
+# and the stand-in terminal built there, so that they are the pencere its prelude is. The cache is
+# one checkout, moved to another ref when Cargo.lock moves, so that cargo builds again only what
+# changed.
+pencere:
+	@command -v cargo >/dev/null || { echo "pencere: cargo is not installed: pencere is built from its source (https://rustup.rs)"; exit 1; }
+	@ref="$(PENCERE_REF)"; test -n "$$ref" || exit 1; \
+	if [ "$(PENCERE_SRC)" = "$(PENCERE_CACHE)" ]; then \
+		if [ "$$(cat $(PENCERE_CACHE).ref 2>/dev/null)" != "$$ref" ]; then \
+			echo "pencere: fetching $(PENCERE_GIT) at $$ref into $(PENCERE_CACHE)"; \
+			{ test -d "$(PENCERE_CACHE)/.git" || git init -q "$(PENCERE_CACHE)"; } && \
+			git -C "$(PENCERE_CACHE)" fetch -q --depth 1 "$(PENCERE_GIT)" "$$ref" && \
+			git -C "$(PENCERE_CACHE)" checkout -q --detach --force FETCH_HEAD && \
+			echo "$$ref" > "$(PENCERE_CACHE).ref" || exit 1; \
+		fi; \
+	else \
+		head=$$(git -C "$(PENCERE_SRC)" rev-parse HEAD 2>/dev/null); \
+		want=$$(git -C "$(PENCERE_SRC)" rev-parse -q --verify "$$ref^{commit}" 2>/dev/null); \
+		[ -n "$$head" ] && [ "$$head" = "$$want" ] || \
+			echo "pencere: $(PENCERE_SRC) is at $${head:-no commit}, not at $$ref (Cargo.lock) that pickpen is built with"; \
+	fi
+	cd "$(PENCERE_SRC)" && cargo build --release -p pencere-cli -p pencere-fake-host
+
 # build makes dist/pickpen, the program for this machine.
 build:
 	cargo build --locked --release
 	mkdir -p dist
 	cp target/release/pickpen dist/pickpen
+
+# dev runs pickpen from its files in this pane, and again when one of them changes (the program
+# built by Cargo, the view shown again without ending it): in a pane of a terminal that hosts
+# pencere (bateri).
+dev: pencere
+	"$(PENCERE)" dev
 
 # test-program runs the program's own tests: the query, the input's shapes, the output, the
 # arguments, what the view is told.
@@ -45,15 +82,13 @@ test-program:
 
 # test-page runs the view against the kit's page API, with a stand-in for its program, in pencere's
 # Lua runner: what it asks, what it shows of what it is told, what its keys and clicks do.
-test-page:
-	@test -x "$(PENCERE)" || { echo "test-page: the pencere command is not at $(PENCERE): see PENCERE at the top of the Makefile"; exit 1; }
+test-page: pencere
 	PENCERE="$(PENCERE)" PENCERE_PRELUDE="$(PRELUDE)" node --test test/lua.test.mjs
 
 # test-binary runs the built program: with nobody to ask (`--where`), and in a pane under the
 # stand-in terminal, with the view's calls. Nothing in it is skipped; a stand-in that is not there
 # stops the run.
-test-binary:
-	@test -x "$(FAKE_HOST)" || { echo "test-binary: pencere-fake-host is not at $(FAKE_HOST): build it in a pencere checkout (cargo build -p pencere-fake-host), then make check FAKE_HOST=<it>"; exit 1; }
+test-binary: pencere
 	PENCERE_FAKE_HOST="$(FAKE_HOST)" PICKPEN_BIN=dist/pickpen node --test test/program.test.mjs
 
 # test-tools runs the tests of the installer (install.sh) against a stand-in for GitHub.

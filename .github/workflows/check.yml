@@ -3,10 +3,11 @@
 # nobody to ask and in a pane by pencere's stand-in terminal, and the installer's tests), on Linux
 # and macOS.
 #
-# The view's tests run in the released `pencere` command of tools/pencere-version (its Lua runner),
-# against the kit's page API: the prelude of pencere at PENCERE_REF. The stand-in terminal has no
-# release, so it is built from that checkout too. Moving that commit is a change of this file (and,
-# while Cargo.toml takes pencere from git, of Cargo.toml's commit with it).
+# pencere, which pickpen is built and tested with, is the one Cargo.lock takes: the program is built
+# on that crate, and `make check` fetches pencere at the same commit or release tag and builds its
+# command and its stand-in terminal there (`make pencere`), as it does on a maintainer's machine, so
+# the view's tests and the end-to-end tests hold pickpen to the pencere it is built with and to
+# nothing else. Moving it is a change of Cargo.toml and Cargo.lock, and of nothing here.
 name: check
 
 on:
@@ -17,10 +18,6 @@ on:
 permissions:
   contents: read
 
-env:
-  # The commit of pencere the stand-in terminal is built from.
-  PENCERE_REF: 2b096273735399a97843d09c3c8c4f7a5d479a51
-
 jobs:
   check:
     strategy:
@@ -30,11 +27,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: bateri/pencere
-          ref: ${{ env.PENCERE_REF }}
-          path: pencere
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
@@ -47,22 +39,17 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: gate
-          workspaces: |
-            . -> target
-            pencere -> target
-      - name: Install the pencere command
-        run: |
-          PENCERE_VERSION="$(cat tools/pencere-version)" PENCERE_INSTALL="$RUNNER_TEMP/pencere" \
-            sh -c "$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/bateri/pencere/main/cli/install.sh)"
-      - name: Build the stand-in terminal from pencere
-        working-directory: pencere
-        run: cargo build -p pencere-fake-host
+          workspaces: . -> target
       - name: Install StyLua
         run: cargo install stylua --locked --features luau --version 2.6.0 --root "$RUNNER_TEMP/stylua"
       - name: make check
         run: |
           export PATH="$RUNNER_TEMP/stylua/bin:$PATH"
-          make check \
-            PENCERE="$RUNNER_TEMP/pencere/pencere" \
-            PRELUDE=pencere/kit/luau/prelude \
-            FAKE_HOST=pencere/target/debug/pencere-fake-host
+          make check
+      - name: Say what the gate was held to
+        run: |
+          {
+            echo "### What this run was held to"
+            echo
+            echo "pencere at \`$(node tools/release.mjs pencere-ref)\` (\`Cargo.lock\`): the crate the program is built on, and its \`pencere\` command, its \`pencere-fake-host\` and the prelude of its kit (\`kit/luau/prelude\`) that the view's tests run the view against."
+          } >> "$GITHUB_STEP_SUMMARY"

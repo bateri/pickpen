@@ -212,15 +212,18 @@ guess whether it is in one (pencere §13).
 
 ```sh
 git clone https://github.com/bateri/pickpen && cd pickpen
-pencere dev         # the program in this pane, shown again as src/view/ changes
-make check          # formatting and clippy, the build, the program's tests, the built program
-                    # with nobody to ask and in a pane under pencere-fake-host, the installer
+make dev            # the program in this pane, built again as it changes, the view shown again
+make check          # formatting and clippy, the build, the program's tests, the view's tests, the
+                    # built program with nobody to ask and in a pane under pencere-fake-host, the
+                    # installer
 ```
 
-`make check` needs Rust 1.88 or later, StyLua (`cargo install stylua --locked --features luau`),
-Node 22 for the tests of the built program, and a pencere checkout beside this one with its
-stand-in terminal built (`cargo build -p pencere-fake-host`). `make demo` writes the inputs of
-`demo/` — made-up pods, processes, an access log, servers and commits — the same every time.
+`make check` needs Rust 1.88 or later, StyLua (`cargo install stylua --locked --features luau`)
+and Node 22. pencere is the one `Cargo.lock` takes: `make dev` and the tests fetch it at that
+commit or release into `.cache/pencere` and build its command and its stand-in terminal there, the
+first time and when it moves. To work against a pencere you are changing, name it:
+`make dev PENCERE_SRC=../pencere`. `make demo` writes the inputs of `demo/` — made-up pods,
+processes, an access log, servers and commits — the same every time.
 
 How a version is released is in [RELEASING.md](RELEASING.md), and what each one changed in
 [CHANGELOG.md](CHANGELOG.md).

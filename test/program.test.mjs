@@ -1,8 +1,9 @@
 // The built program, dist/pickpen (PICKPEN_BIN), run as it is run: with nobody to ask (`--where`
 // writes what the query matches, as grep would, and the exit status says whether anything went out),
 // and in a pipeline in a pane, with pencere's stand-in terminal (`pencere-fake-host`, at
-// PENCERE_FAKE_HOST) playing the terminal and a scripted view: the view's calls travel to the program
-// through the tty while stdin and stdout carry the pipeline's data.
+// PENCERE_FAKE_HOST, the one the Makefile builds in its pencere: run it with `make test-binary`)
+// playing the terminal and a scripted view: the view's calls travel to the program through the tty
+// while stdin and stdout carry the pipeline's data.
 //
 // Nothing here is skipped: a program or a stand-in that is not there fails the run and says which.
 
@@ -14,15 +15,15 @@ import { join, resolve } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 
 const BIN = resolve(process.env.PICKPEN_BIN ?? new URL("../dist/pickpen", import.meta.url).pathname);
-const HOST = resolve(
-  process.env.PENCERE_FAKE_HOST ?? new URL("../../pencere/target/debug/pencere-fake-host", import.meta.url).pathname,
-);
 const DEMO = new URL("../demo/", import.meta.url).pathname;
 
-if (!existsSync(BIN)) throw new Error(`the program is not at ${BIN}: make build (PICKPEN_BIN=<it>)`);
-if (!existsSync(HOST)) {
-  throw new Error(`pencere-fake-host is not at ${HOST}: cargo build -p pencere-fake-host in a pencere checkout`);
+if (!process.env.PENCERE_FAKE_HOST) {
+  throw new Error("PENCERE_FAKE_HOST names no stand-in terminal: make test-binary");
 }
+const HOST = resolve(process.env.PENCERE_FAKE_HOST);
+
+if (!existsSync(BIN)) throw new Error(`the program is not at ${BIN}: make build (PICKPEN_BIN=<it>)`);
+if (!existsSync(HOST)) throw new Error(`pencere-fake-host is not at ${HOST}: make test-binary`);
 
 const PODS = readFileSync(`${DEMO}pods.txt`, "utf8");
 

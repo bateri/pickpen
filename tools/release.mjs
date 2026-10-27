@@ -8,6 +8,8 @@
 //   rehearse            everything a release of the prepared version checks, on any branch
 //   notes [<version>]   the CHANGELOG section of a version
 //   version             the version pickpen says it is (Cargo.toml)
+//   pencere-ref         the commit or release tag of pencere that Cargo.lock takes it at, which the
+//                       Makefile fetches the command, the stand-in terminal and the kit's prelude at
 //
 // In the release workflow (.github/workflows/release.yml), after the gate is green on main:
 //
@@ -87,6 +89,57 @@ function setVersion(version) {
   const lock = readFileSync(LOCKFILE, "utf8");
   if (!LOCKED_VERSION.test(lock)) refuse("Cargo.lock has no entry for pickpen: run cargo build first");
   writeFileSync(LOCKFILE, lock.replace(LOCKED_VERSION, `$1${version}$3`));
+}
+
+// ---- pencere ---------------------------------------------------------------
+
+/**
+ * pencere as Cargo.lock has it: each of its packages (`pencere`, `pencere-wire`) and the source it
+ * is taken from, a commit of the repository or a release on crates.io. Cargo.lock is the one place
+ * pencere is pinned: the program is built from it, and the gate's command, stand-in terminal and
+ * prelude are fetched at the same pencere.
+ */
+const LOCKED_PENCERE = /\[\[package\]\]\nname = "(pencere(?:-[a-z]+)*)"\nversion = "([^"]+)"\nsource = "([^"]+)"/g;
+const PENCERE_GIT = /^git\+https:\/\/github\.com\/bateri\/pencere(?:\?[^#]*)?#([0-9a-f]{40})$/;
+const CRATES_IO = "registry+https://github.com/rust-lang/crates.io-index";
+
+function pencereLocked() {
+  const packages = [...readFileSync(LOCKFILE, "utf8").matchAll(LOCKED_PENCERE)].map(
+    ([, name, version, source]) => ({ name, version, source }),
+  );
+  const pencere = packages.find((p) => p.name === "pencere");
+  if (pencere === undefined) refuse("Cargo.lock takes no pencere: run cargo build first");
+  const other = packages.find((p) => p.source !== pencere.source || p.version !== pencere.version);
+  if (other !== undefined) {
+    refuse(
+      `Cargo.lock takes ${other.name} ${other.version} from ${other.source}, and pencere ${pencere.version} from ${pencere.source}: one pencere, from one place`,
+    );
+  }
+  const commit = PENCERE_GIT.exec(pencere.source)?.[1];
+  if (commit !== undefined) return { commit };
+  if (pencere.source === CRATES_IO) return { version: pencere.version };
+  refuse(`Cargo.lock takes pencere from ${pencere.source}, neither bateri/pencere nor crates.io`);
+}
+
+/** The git ref of pencere the Makefile fetches: the commit, or the tag of the crates' release. */
+function pencereRef() {
+  const { commit, version } = pencereLocked();
+  return commit ?? `crates-v${version}`;
+}
+
+/**
+ * The release of pencere a release of pickpen is built with. A commit is what the gate is held to
+ * while pickpen needs what no release of pencere has, and nothing to release with: what a release
+ * is built from is published (RELEASING.md).
+ */
+function pencereRelease() {
+  const { commit, version } = pencereLocked();
+  if (commit !== undefined) {
+    refuse(
+      `Cargo.lock takes pencere at ${commit}, a commit of it and not a release of it on crates.io: a release of pickpen is built with a published pencere, so there is none until Cargo.toml takes one (RELEASING.md)`,
+    );
+  }
+  return version;
 }
 
 // ---- the changelog ---------------------------------------------------------
@@ -210,9 +263,10 @@ function releaseState(tag) {
 
 /** Everything a release of the prepared version checks, on any branch: what `make rehearse` runs. */
 function rehearse() {
+  const pencere = pencereRelease();
   const { version, tag } = versionChecks();
   if (tagExists(tag)) refuse(`the tag ${tag} exists`);
-  console.log(`${NAME} ${version} is ready to be released as ${tag}`);
+  console.log(`${NAME} ${version} is ready to be released as ${tag}, with pencere ${pencere}`);
 }
 
 /** The run of the gate (check.yml) for the commit, on main, must have finished, and well. */
@@ -265,6 +319,7 @@ function plan() {
     console.error(`${tagOf(version)} exists: nothing to release`);
     release = false;
   } else {
+    pencereRelease();
     const { tag } = versionChecks();
     if (tagExists(tag)) {
       if (!tagIsHead(tag)) refuse(`${tag} is on another commit: a tag is never moved`);
@@ -478,6 +533,10 @@ function version() {
   console.log(versionOf());
 }
 
+function pencereRefCommand() {
+  console.log(pencereRef());
+}
+
 const COMMANDS = {
   prepare,
   rehearse,
@@ -488,6 +547,7 @@ const COMMANDS = {
   publish,
   notes,
   version,
+  "pencere-ref": pencereRefCommand,
 };
 
 const [command, ...args] = process.argv.slice(2);
