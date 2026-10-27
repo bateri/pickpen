@@ -26,8 +26,11 @@ pub const MAX_CELL: usize = 2_000;
 const KIND_ROWS: usize = 500;
 const WIDTH_ROWS: usize = 300;
 
+/// How many rows are looked through on one core; more are shared out among them all.
+const ROWS_PER_CORE: usize = 20_000;
+
 /// What a person sees of the rows: the order they are shown in.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Order {
     pub column: usize,
     pub descending: bool,
@@ -96,6 +99,9 @@ pub struct Picker {
     /// Moves when anything the view is told changes.
     pub version: u64,
     sort_keys: HashMap<usize, Vec<SortKey>>,
+    /// Every row in an order the rows were shown in: sorted once and taken on as rows come, so that
+    /// a query keeps the rows in their order instead of sorting the ones it keeps.
+    orders: HashMap<Order, Vec<u32>>,
     /// Rows came while the rows are ordered: they are taken into their places at most a few times a
     /// second, not one by one.
     pub resort_due: Option<Instant>,
@@ -108,6 +114,60 @@ pub fn cut(text: &str, most: usize) -> &str {
         Some((at, _)) => &text[..at],
         None => text,
     }
+}
+
+/// How many pieces `rows` rows are shared out in, one to a core.
+fn pieces(rows: usize) -> usize {
+    std::thread::available_parallelism()
+        .map_or(1, usize::from)
+        .min(rows / ROWS_PER_CORE)
+}
+
+/// The ids `keep` keeps, in their order: looked through on every core, since a query over every row
+/// is what each key typed waits for.
+fn kept(ids: &[u32], keep: impl Fn(u32) -> bool + Sync) -> Vec<u32> {
+    let pieces = pieces(ids.len());
+    if pieces <= 1 {
+        return ids.iter().copied().filter(|&id| keep(id)).collect();
+    }
+    let keep = &keep;
+    std::thread::scope(|scope| {
+        let pieces: Vec<_> = ids
+            .chunks(ids.len().div_ceil(pieces))
+            .map(|piece| {
+                scope.spawn(move || {
+                    piece
+                        .iter()
+                        .copied()
+                        .filter(|&id| keep(id))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        let mut out = Vec::new();
+        for piece in pieces {
+            out.extend(
+                piece
+                    .join()
+                    .unwrap_or_else(|why| std::panic::resume_unwind(why)),
+            );
+        }
+        out
+    })
+}
+
+/// Each piece of `ids` sorted by `compare`, on a core of its own: runs, which a sort of the whole
+/// then merges.
+fn sort_pieces(ids: &mut [u32], compare: &(impl Fn(&u32, &u32) -> Ordering + Sync)) {
+    let pieces = pieces(ids.len());
+    if pieces <= 1 {
+        return;
+    }
+    std::thread::scope(|scope| {
+        for piece in ids.chunks_mut(ids.len().div_ceil(pieces)) {
+            scope.spawn(move || piece.sort_by(compare));
+        }
+    });
 }
 
 impl Picker {
@@ -150,6 +210,7 @@ impl Picker {
             self.order = None;
         }
         self.sort_keys.clear();
+        self.orders.clear();
         self.scales.clear();
         self.read_columns();
         self.refilter();
@@ -343,39 +404,54 @@ impl Picker {
         keys
     }
 
-    /// The ids in the order shown: by the column ordered by, or, with fuzzy words and no order,
-    /// best match first; ties keep the input's order.
-    fn sort_ids(&mut self, ids: &mut [u32]) {
-        let Some(order) = self.order else {
-            if self.query.ranks() {
-                let (query, lower) = (&self.query, &self.lower);
-                ids.sort_by_cached_key(|&id| {
-                    (std::cmp::Reverse(query.score(&lower[id as usize])), id)
-                });
-            }
-            return;
-        };
-        if order.column >= self.names.len() {
-            return;
+    /// Every row in `order`, ties in the input's order.
+    fn ordered(&mut self, order: Order) -> &[u32] {
+        self.keys_of(order.column);
+        let keys = &self.sort_keys[&order.column];
+        let ids = self.orders.entry(order).or_default();
+        let sorted = ids.len();
+        if sorted < self.records.len() {
+            ids.extend(sorted as u32..self.records.len() as u32);
+            let compare = |&a: &u32, &b: &u32| {
+                query::compare_ordered(&keys[a as usize], &keys[b as usize], order.descending)
+                    .then(a.cmp(&b))
+            };
+            // The rows already in order are one run, which the sort takes as it is: only the rows
+            // that came since are sorted, then merged in.
+            sort_pieces(&mut ids[sorted..], &compare);
+            ids.sort_by(compare);
         }
-        let keys = self.keys_of(order.column);
-        ids.sort_by(|&a, &b| {
-            query::compare_ordered(&keys[a as usize], &keys[b as usize], order.descending)
-                .then(a.cmp(&b))
-        });
+        ids
+    }
+
+    /// The rows `keep` keeps, in the order shown: by the column ordered by, or, with fuzzy words
+    /// and no order, best match first; ties keep the input's order.
+    fn in_order(&mut self, keep: impl Fn(&Self, usize) -> bool + Sync) -> Vec<u32> {
+        let order = self.order.filter(|o| o.column < self.names.len());
+        if let Some(order) = order {
+            self.ordered(order);
+        }
+        let this = &*self;
+        let every: Vec<u32>;
+        let ids = match order {
+            Some(order) => &this.orders[&order],
+            None => {
+                every = (0..this.records.len() as u32).collect();
+                &every
+            }
+        };
+        let mut ids = kept(ids, |id| keep(this, id as usize));
+        if this.order.is_none() && this.query.ranks() {
+            let (query, lower) = (&this.query, &this.lower);
+            ids.sort_by_cached_key(|&id| (std::cmp::Reverse(query.score(&lower[id as usize])), id));
+        }
+        ids
     }
 
     /// The rows the query matches, in the order shown; the windows the view holds are of other rows now.
     pub fn refilter(&mut self) {
-        let mut ids: Vec<u32> = if self.query.terms.is_empty() {
-            (0..self.records.len() as u32).collect()
-        } else {
-            (0..self.records.len())
-                .filter(|&at| query::matches(&self.query, &self.records[at].cells, &self.lower[at]))
-                .map(|at| at as u32)
-                .collect()
-        };
-        self.sort_ids(&mut ids);
+        let ids =
+            self.in_order(|p, at| query::matches(&p.query, &p.records[at].cells, &p.lower[at]));
         self.place.fill(u32::MAX);
         self.marked_shown = 0;
         for (index, &id) in ids.iter().enumerate() {
@@ -526,12 +602,7 @@ impl Picker {
 
     /// The marked rows, in the order they go out: the order shown, ties in the input's.
     pub fn marked_ids(&mut self) -> Vec<u32> {
-        let mut ids: Vec<u32> = (0..self.marked.len())
-            .filter(|&id| self.marked[id])
-            .map(|id| id as u32)
-            .collect();
-        self.sort_ids(&mut ids);
-        ids
+        self.in_order(|p, id| p.marked[id])
     }
 
     /// The rows the rule of `--confirm` matches, every one.
@@ -807,3 +878,7 @@ impl Picker {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "picker_tests.rs"]
+mod tests;

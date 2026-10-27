@@ -575,6 +575,10 @@ impl Row {
 /// `file10`. A plain loop, not a collation, so that the view and the program, on two machines,
 /// put rows in one order.
 pub fn compare_text(a: &str, b: &str) -> Ordering {
+    // The same text, which a long sort compares most: many rows hold one value.
+    if a == b {
+        return Ordering::Equal;
+    }
     if a.is_ascii() && b.is_ascii() {
         let (x, y) = (a.as_bytes(), b.as_bytes());
         let order = compare_lowered(
