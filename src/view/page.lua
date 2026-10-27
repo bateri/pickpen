@@ -126,7 +126,7 @@ end
 
 -- Brings what depends on the layout within it: the list's size, the scrolled boxes, the cursor.
 local function settle()
-	local moved = L.ui:settle(pencere.layout)
+	local moved = false
 	local extent = pencere.layout.scroll_extent("rows")
 	if extent and (extent.view ~= R.view.h or extent.view_w ~= R.view.w) then
 		R.view = { w = extent.view_w, h = extent.view }
@@ -703,15 +703,20 @@ local function on_release(event)
 	A.keep_keyboard()
 end
 
-local function on_scroll(event)
-	local at = { x = event.x, y = event.y }
-	local moved = L.ui:scroll_by(pencere.layout, at, event.dx, event.dy)
-	local extent = pencere.layout.scroll_extent("rows")
-	if extent and L.ui:scroll_offset("rows") >= extent.max_offset - L.SIZE.row and S.unseen > 0 then
-		S.unseen = 0
-		moved = true
+-- The host scrolled boxes of the page: the list's rows in sight are the ones at its new place, and
+-- the rows that came below are seen once the list is at its end. The other boxes are moved by
+-- the host and need nothing.
+local function on_scrolled(event)
+	for _, box in ipairs(event.boxes) do
+		if box.id == "rows" then
+			local extent = pencere.layout.scroll_extent("rows")
+			if extent and box.y >= extent.max_offset - L.SIZE.row then
+				S.unseen = 0
+			end
+			return true
+		end
 	end
-	return moved
+	return false
 end
 
 local function handle(event)
@@ -744,8 +749,8 @@ local function handle(event)
 	elseif kind == "leave" then
 		S.pointer = nil
 		return L.ui:point(pencere.layout, nil)
-	elseif kind == "scroll" then
-		return on_scroll(event)
+	elseif kind == "scrolled" then
+		return on_scrolled(event)
 	elseif kind == "menu" then
 		local items = S.menu
 		S.menu = nil

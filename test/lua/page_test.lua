@@ -440,9 +440,29 @@ t.test("of a wide table only the columns in sight are made, and scrolling across
 	local words = texts(k)
 	t.has(words, "ALPHA")
 	t.lacks(words, "JULIET", "a column far to the right is not made")
-	k.hit_id = "rows"
-	act(k, { type = "scroll", x = 10, y = 10, dx = 700, dy = 0 })
+	-- The host scrolls the list across, and tells the page where it went.
+	t.eq(k:wheel("rows", 700, 0), true, "the rows in sight are built again")
+	k:render(W, H, 101.2)
 	words = texts(k)
 	t.has(words, "JULIET", "scrolled across, it is")
 	t.lacks(words, "ALPHA", "and the first, now far to the left, is not")
+end)
+
+t.test("the cursor going out of sight asks the host to scroll the list to it", function()
+	local rows = {}
+	for i = 1, 50 do
+		rows[i] = { "pod-" .. i, "Running", i .. "m" }
+	end
+	local k = opened(rows)
+	-- The list shows three rows of twenty-two points of fifty.
+	k.extents.rows = { content = 22 * 50, view = 66 }
+	k:render(W, H, 101)
+	k:settle()
+	for _ = 1, 3 do
+		key(k, "down")
+	end
+	t.eq(k.asks[#k.asks], { id = "rows", y = 22, animate = false }, "the fourth row at the bottom")
+	t.eq(k.offsets.rows.y, 22)
+	key(k, "down", { command = true })
+	t.eq(k.offsets.rows.y, 22 * 50 - 66, "the last row: the end of the list")
 end)

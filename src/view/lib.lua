@@ -1,5 +1,5 @@
 -- What every file of the page shares: the kit's builders, the one `Ui` that remembers the pointer
--- and the scrolling between frames, the sizes, the colours mixed from the theme's roles, and the
+-- between frames, how far the host has each box scrolled, the sizes, the colours mixed from the theme's roles, and the
 -- small pieces a screen is made of (a line of text, an icon, keys as the Mac writes them, a button
 -- that never takes the keyboard from the query).
 
@@ -23,6 +23,23 @@ L.SIZE = {
 	tabs = 30, -- the tabs of the side panel
 	pad = 8, -- the room at each side of a cell
 }
+
+-- How far the host has the box named `id` scrolled, down and across: the host scrolls a box (the
+-- wheel, the trackpad, its bars, as the Mac does) and tells the page where it went.
+function L.scrolled(id)
+	local y = pencere.layout.scroll_offset(id)
+	return y
+end
+
+function L.scrolled_x(id)
+	local _, x = pencere.layout.scroll_offset(id)
+	return x
+end
+
+-- Asks the host to scroll the box named `id` down to `y`, before the page is next laid out.
+function L.scroll_to(id, y)
+	pencere.layout.scroll_to(id, { y = y })
+end
 
 -- How wide a character of the terminal's font is at `size`: a little over a half of the size.
 function L.char_width(size)

@@ -276,8 +276,7 @@ end
 function R.view_of()
 	local sum = S.sum
 	local columns, total = R.columns()
-	local oy = L.ui:scroll_offset("rows")
-	local ox = L.ui:scroll_offset_x("rows")
+	local oy, ox = L.scrolled("rows"), L.scrolled_x("rows")
 	-- Only the columns in sight are made (a row of a wide table is a few of its cells, not all), the
 	-- room of those to their left kept by one empty box; those to the right need none.
 	local visible, skipped = {}, 0
@@ -297,8 +296,7 @@ function R.view_of()
 	A.set_page_rows(math.floor(view_h / SIZE.row))
 	A.need(first, last)
 
-	local list =
-		b.div():id("rows"):col():grow(1):min_h(0):scroll_y(oy):scroll_x(ox):family("terminal"):text_size(SIZE.cell)
+	local list = b.div():id("rows"):col():grow(1):min_h(0):scroll():family("terminal"):text_size(SIZE.cell)
 	list:child(b.div():h(math.max(first - 1, 0) * SIZE.row):w(total):no_shrink())
 	for index = first, last do
 		list:child(row_of(index, layout))
@@ -355,12 +353,12 @@ function R.hit(at)
 	if at.x < rect.x or at.x >= rect.x + rect.w or at.y < rect.y or at.y >= rect.y + rect.h then
 		return nil
 	end
-	local y = at.y - rect.y + L.ui:scroll_offset("rows")
+	local y = at.y - rect.y + L.scrolled("rows")
 	local index = math.floor(y / SIZE.row) + 1
 	if index < 1 or index > A.shown() then
 		return nil
 	end
-	local x = at.x - rect.x + L.ui:scroll_offset_x("rows")
+	local x = at.x - rect.x + L.scrolled_x("rows")
 	local column = nil
 	for _, place in ipairs(R.last_layout.columns) do
 		if x >= place.x and x < place.x + place.w then
@@ -376,12 +374,12 @@ function R.reveal()
 		return
 	end
 	local top = (S.cursor - 1) * SIZE.row
-	local offset = L.ui:scroll_offset("rows")
+	local offset = L.scrolled("rows")
 	local view = R.view.h
 	if top < offset then
-		L.ui:set_scroll("rows", top)
+		L.scroll_to("rows", top)
 	elseif top + SIZE.row > offset + view then
-		L.ui:set_scroll("rows", math.max(top + SIZE.row - view, 0))
+		L.scroll_to("rows", math.max(top + SIZE.row - view, 0))
 	end
 end
 

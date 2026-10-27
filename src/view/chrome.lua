@@ -261,7 +261,7 @@ function K.palette()
 		)
 	)
 	box:child(b.div():h(1):bg(L.line):no_shrink())
-	local list = b.div():id("palette"):col():p(4):scroll_y(L.ui:scroll_offset("palette"))
+	local list = b.div():id("palette"):col():p(4):scroll()
 	list:h(math.min(math.max(#shown, 1) * 26 + 8, math.min(400, math.floor(S.height * 0.8) - 50)))
 	if #shown == 0 then
 		list:child(b.div():p(10):child(T("No command has those words.", "quiet")))
@@ -297,13 +297,13 @@ end
 -- Scrolls the palette's list to the entry the cursor is on.
 function K.palette_reveal()
 	local top = (S.palette.chosen - 1) * 26
-	local offset = L.ui:scroll_offset("palette")
+	local offset = L.scrolled("palette")
 	local extent = pencere.layout.scroll_extent("palette")
 	local view = extent and extent.view or 300
 	if top < offset then
-		L.ui:set_scroll("palette", top)
+		L.scroll_to("palette", top)
 	elseif top + 26 + 8 > offset + view then
-		L.ui:set_scroll("palette", top + 26 + 8 - view)
+		L.scroll_to("palette", top + 26 + 8 - view)
 	end
 end
 
@@ -422,7 +422,7 @@ function K.help()
 			:px(18)
 			:pb(16)
 			:h(math.min(math.floor(S.height * 0.84) - 60, 1400))
-			:scroll_y(L.ui:scroll_offset("help"))
+			:scroll()
 			:child(columns)
 	)
 	return scrim("scrim"):child(box)
