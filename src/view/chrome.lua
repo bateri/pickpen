@@ -377,7 +377,7 @@ function K.help()
 	local keys_col = b.div():col():grow(1):min_w(0)
 	for _, group in ipairs(C.GROUPS) do
 		local g = help_group(group)
-		for _, command in ipairs(C.COMMANDS) do
+		for _, command in ipairs(C.keyed()) do
 			if command.group == group and command.keys and not string.find(command.id, "^order%-%d") then
 				local caps = b.div():row():wrap():gap(4):items_center()
 				for _, spec in ipairs(command.keys) do

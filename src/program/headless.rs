@@ -165,6 +165,9 @@ impl Sink for Headless<'_> {
         }
         if !self.headed {
             self.headed = true;
+            if !self.run.expect.is_empty() {
+                self.out.write(&output::key_line(None, self.run.print0));
+            }
             self.out.write(&output::head(
                 &self.run.shape,
                 &self.source(),
@@ -266,6 +269,9 @@ pub fn run(run: &Run, stream: Box<dyn Read + Send>) -> ExitCode {
         }
         let records: Vec<&Record> = held.iter().collect();
         rest = output::render(&records, &run.shape, &headless.source(), run.print0);
+        if !run.expect.is_empty() && !rest.is_empty() {
+            rest = output::key_line(None, run.print0) + &rest;
+        }
     }
     write_all(rest.as_bytes(), if headless.count > 0 { 0 } else { 1 })
 }

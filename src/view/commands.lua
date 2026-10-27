@@ -314,7 +314,7 @@ end
 -- column offers.
 function C.palette_commands()
 	local out = {}
-	for _, command in ipairs(C.COMMANDS) do
+	for _, command in ipairs(C.keyed()) do
 		if not command.quiet then
 			out[#out + 1] = command
 		end
@@ -406,9 +406,40 @@ function C.can_run(command)
 	return command.when == nil or command.when()
 end
 
+-- The keys `--expect` gives, each a Send of its own: the program writes the key ahead of the rows.
+-- They come before the page's own keys, as fzf's do.
+function C.expect_commands()
+	local out = {}
+	for _, expect in ipairs(S.boot and S.boot.expect or {}) do
+		out[#out + 1] = {
+			id = "expect:" .. expect.name,
+			also = "expect key",
+			title = "Send, saying " .. expect.name,
+			group = "Send",
+			keys = { expect.keys },
+			when = function()
+				return A.to_send() > 0
+			end,
+			run = function()
+				A.send(nil, expect.name)
+			end,
+		}
+	end
+	return out
+end
+
+-- Every command that is on a key: the `--expect` ones, then the page's own.
+function C.keyed()
+	local out = C.expect_commands()
+	for _, command in ipairs(C.COMMANDS) do
+		out[#out + 1] = command
+	end
+	return out
+end
+
 -- Runs the command of a key, when there is one: whether there was.
 function C.run_key(key, mods)
-	for _, command in ipairs(C.COMMANDS) do
+	for _, command in ipairs(C.keyed()) do
 		for _, spec in ipairs(command.keys or {}) do
 			if L.matches(key, mods, spec) and C.can_run(command) then
 				command.run()

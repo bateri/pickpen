@@ -34,7 +34,10 @@ you choose in the terminal pane, and the rows you chose go out on stdout.
                          the last taking the rest of the line: -d : for grep -n
       --read0            rows end at NUL, as find -print0 writes them
   -p, --preview COMMAND  show what COMMAND prints for the row the cursor is on;
-                         {} {COLUMN} {2} stand for the row and its cells
+                         {} {COLUMN} {2} stand for the row and its cells, {q} for
+                         the query, {+} {+COLUMN} for the marked rows (or the row)
+      --expect KEY,…     KEY sends too (ctrl-o, f5), and the first line written is
+                         the key that sent, empty for Enter
   -t, --title TEXT       a line above the rows, saying what they are for
   -h, --help             this text
   -v, --version          the version
@@ -84,8 +87,25 @@ pub struct Run {
     pub print0: bool,
     pub cut: Cut,
     pub preview: Option<String>,
+    /// `--expect`: the keys besides Enter that send, as fzf names them (`ctrl-o`, `f5`).
+    pub expect: Vec<String>,
     pub title: Option<String>,
     pub given: Given,
+}
+
+/// A key `--expect` takes, as fzf names it, and as the view's keys are written (`Ctrl-o`, `F5`):
+/// ⌃ with a letter or a digit, or a function key. The others type, or are a terminal's own.
+pub fn expect_keys(name: &str) -> Option<String> {
+    if let Some(key) = name.strip_prefix("ctrl-")
+        && key.len() == 1
+        && key
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+    {
+        return Some(format!("Ctrl-{key}"));
+    }
+    let n: u8 = name.strip_prefix('f')?.parse().ok()?;
+    ((1..=12).contains(&n) && name == format!("f{n}")).then(|| format!("F{n}"))
 }
 
 // Made once, so the size of `Run` costs nothing.
@@ -105,7 +125,7 @@ enum Kind {
 
 /// The options, as `parseArgs` was given them: long name, short name, kind, and whether it may
 /// be given more than once.
-const OPTIONS: [(&str, char, Kind, bool); 16] = [
+const OPTIONS: [(&str, char, Kind, bool); 17] = [
     ("query", 'q', Kind::Text, false),
     ("fuzzy", 'z', Kind::Flag, false),
     ("where", 'w', Kind::Text, false),
@@ -119,6 +139,7 @@ const OPTIONS: [(&str, char, Kind, bool); 16] = [
     ("delimiter", 'd', Kind::Text, false),
     ("read0", '\0', Kind::Flag, false),
     ("preview", 'p', Kind::Text, false),
+    ("expect", '\0', Kind::Text, true),
     ("title", 't', Kind::Text, false),
     ("help", 'h', Kind::Flag, false),
     ("version", 'v', Kind::Flag, false),
@@ -440,6 +461,20 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
         sort = Some(Sort { column, descending });
     }
 
+    let mut expect: Vec<String> = Vec::new();
+    for name in values.all("expect").iter().flat_map(|e| e.split(',')) {
+        let name = js_trim(name).to_lowercase();
+        if expect_keys(&name).is_none() {
+            return Err(format!(
+                "--expect takes ctrl-<letter>, ctrl-<digit> or f1 to f12, not {}",
+                quote_json(&name)
+            ));
+        }
+        if !expect.contains(&name) {
+            expect.push(name);
+        }
+    }
+
     let file = positionals.into_iter().next().filter(|file| file != "-");
     Ok(Parsed::Run(Run {
         file,
@@ -456,6 +491,7 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
             nul: read0,
         },
         preview: values.text("preview"),
+        expect,
         title: values.text("title"),
         given: Given {
             input: given_input,

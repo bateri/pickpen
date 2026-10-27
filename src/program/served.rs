@@ -11,7 +11,8 @@
 //! - `mark`, `mark_range`, `mark_shown`, `unmark_all`, `invert`, `mark_value`: the marks
 //! - `column`: a column's values and chart; `output`: what Send would write, and the command line
 //!   that does it again; `preview`: what `--preview` prints for a row; `copy_row`
-//! - `choose`: the rows to send, after which the view closes and the program writes them.
+//! - `choose`: the rows to send (and the `--expect` key they were sent with), after which the view
+//!   closes and the program writes them.
 
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
@@ -38,12 +39,19 @@ const CLOSE_AFTER: Duration = Duration::from_millis(50);
 /// The most rows the output panel draws.
 const OUTPUT_ROWS: usize = 200;
 
+/// What the person sent: the rows, their shape, and the `--expect` key they sent them with.
+pub struct Answer {
+    pub rows: Vec<u32>,
+    pub shape: Shape,
+    pub key: Option<String>,
+}
+
 /// The picker and the bell that rings when it changes.
 pub struct Shared {
     pub picker: Mutex<Picker>,
     pub changed: Condvar,
-    /// The rows the person chose and their shape, once they have.
-    pub answer: Mutex<Option<(Vec<u32>, Shape)>>,
+    /// What the person sent, once they have.
+    pub answer: Mutex<Option<Answer>>,
     /// The person sent nothing.
     pub cancelled: Mutex<bool>,
 }
@@ -144,6 +152,7 @@ fn again(picker: &Picker, run: &Run, fields: Option<&[String]>) -> Value {
             format: run.given.format.clone(),
             output: run.given.output.clone(),
             print0: run.given.print0,
+            expect: run.expect.clone(),
         })
     };
     let candidates = picker.again_candidates();
@@ -218,6 +227,10 @@ pub fn serve(
             "where": r.where_,
             "confirm": r.confirm,
             "preview": r.preview,
+            "expect": r.expect.iter().map(|name| json!({
+                "name": name,
+                "keys": crate::args::expect_keys(name),
+            })).collect::<Vec<_>>(),
             "given": {
                 "input": r.given.input,
                 "delimiter": r.given.delimiter,
@@ -461,7 +474,12 @@ pub fn serve(
                     .take(OUTPUT_ROWS)
                     .map(|&id| &picker.records[id as usize])
                     .collect();
-                out["text"] = json!(output::render(&records, &shape, &picker.source(), r.print0));
+                let mut text = output::render(&records, &shape, &picker.source(), r.print0);
+                // What Enter would write: with --expect, an empty line for its key first.
+                if !r.expect.is_empty() && !text.is_empty() {
+                    text = output::key_line(None, r.print0) + &text;
+                }
+                out["text"] = json!(text);
             }
         }
         Ok(out)
@@ -491,12 +509,28 @@ pub fn serve(
             let s = shared.clone();
             options.call("preview", move |params, call: &Call| {
                 let command = {
-                    let picker = s.lock();
+                    let mut picker = s.lock();
+                    // The marked rows only when the command asks for them: there may be many.
+                    let ids = if template.contains("{+") {
+                        picker.marked_ids()
+                    } else {
+                        Vec::new()
+                    };
                     let record = params["id"]
                         .as_u64()
                         .and_then(|id| picker.records.get(id as usize))
                         .ok_or_else(|| bad("There is no such row"))?;
-                    preview::command_for(&template, record, &picker.source())
+                    let marked: Vec<_> =
+                        ids.iter().map(|&id| &picker.records[id as usize]).collect();
+                    preview::command_for(
+                        &template,
+                        &preview::Fill {
+                            record,
+                            query: &picker.query_text,
+                            marked: &marked,
+                            source: picker.source(),
+                        },
+                    )
                 };
                 let width = params["width"].as_u64().unwrap_or(80).clamp(10, 1000) as u32;
                 let result = preview::run(&command, width, &|| call.is_cancelled());
@@ -543,10 +577,14 @@ pub fn serve(
         if rows.is_empty() {
             return Err(ViewError::with_message("nothing", "No row was chosen"));
         }
+        let key = params["key"].as_str().map(str::to_owned);
+        if key.as_ref().is_some_and(|key| !r.expect.contains(key)) {
+            return Err(bad("That key is not one --expect gave"));
+        }
         let count = rows.len();
         *s.answer
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some((rows, shape));
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Answer { rows, shape, key });
         close_soon(&c);
         Ok(json!({ "sent": count }))
     })

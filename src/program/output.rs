@@ -158,6 +158,12 @@ fn end_of(nul: bool) -> &'static str {
     if nul { "\0" } else { "\n" }
 }
 
+/// With `--expect`, the line ahead of the rows: the key that sent them, as fzf writes it, or nothing
+/// for Enter (and for `--where`, which no key sends).
+pub fn key_line(key: Option<&str>, nul: bool) -> String {
+    format!("{}{}", key.unwrap_or_default(), end_of(nul))
+}
+
 /// Each item, ended as a row is: every one the output writes ends so.
 fn lines(items: impl IntoIterator<Item = String>, end: &str) -> String {
     let mut out = String::new();

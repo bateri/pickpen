@@ -79,8 +79,19 @@ views, anything that needs a person ends with status 2 and sends nothing: pickpe
 for you.
 
 **A preview of the row the cursor is on.** `--preview 'git show --color {1}'` runs on the machine
-pickpen runs on, with `{}`, `{COLUMN}` and `{2}` quoted for the shell, in a session of its own
-with no terminal and no stdin, and shows what it prints, colours and all.
+pickpen runs on, with `{}`, `{COLUMN}` and `{2}` quoted for the shell — `{q}` is the query, and
+`{+}`, `{+COLUMN}` each marked row (or the cursor's) — in a session of its own with no terminal and
+no stdin, and shows what it prints, colours and all.
+
+**One more key that sends, and says so.** `--expect ctrl-o,f5` makes those keys send as Enter does,
+and the first line written is the key that sent (empty for Enter, and for `--where`), so that a
+script can open what was chosen one way or another:
+
+```sh
+out=$(git ls-files | pickpen --fuzzy --expect ctrl-o) || exit
+key=$(printf '%s\n' "$out" | head -1); file=$(printf '%s\n' "$out" | sed 1d)
+if [ "$key" = ctrl-o ]; then open "$file"; else vim "$file"; fi
+```
 
 |                                                                     |                                                         |
 | ------------------------------------------------------------------- | ------------------------------------------------------- |

@@ -568,12 +568,13 @@ local function fields_param(params)
 	return params
 end
 
--- Sends the rows chosen: the program writes them once the view has closed.
-function A.send(id)
+-- Sends the rows chosen: the program writes them once the view has closed. `key` is the `--expect`
+-- key that sent them, which the program writes ahead of them (none for Enter).
+function A.send(id, key)
 	if S.sending then
 		return
 	end
-	local params = {}
+	local params = { key = key }
 	if id ~= nil then
 		params.ids = list({ id })
 	elseif S.sum and S.sum.marked > 0 then
@@ -746,6 +747,14 @@ function A.want_preview(width_chars)
 		return
 	end
 	local key = tostring(id) .. ":" .. tostring(width_chars)
+	-- A command with the query or the marked rows in it is run again when they change.
+	local template = S.boot and S.boot.preview or ""
+	if string.find(template, "{q}", 1, true) then
+		key = key .. "\0" .. S.query
+	end
+	if string.find(template, "{+", 1, true) then
+		key = key .. "\0" .. tostring(S.marks_rev)
+	end
 	if key == S.preview_key then
 		return
 	end

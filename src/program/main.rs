@@ -156,13 +156,16 @@ fn choose(run: Run, stream: Box<dyn Read + Send>) -> ExitCode {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .take();
-    if let Some((rows, shape)) = answer {
+    if let Some(served::Answer { rows, shape, key }) = answer {
         let picker = shared.lock();
         let records: Vec<&Record> = rows
             .iter()
             .map(|&id| &picker.records[id as usize])
             .collect();
-        let text = output::render(&records, &shape, &picker.source(), run.print0);
+        let mut text = output::render(&records, &shape, &picker.source(), run.print0);
+        if !run.expect.is_empty() {
+            text = output::key_line(key.as_deref(), run.print0) + &text;
+        }
         return headless::write_all(text.as_bytes(), 0);
     }
     if *shared

@@ -19,6 +19,8 @@ pub struct Recipe {
     pub format: Option<String>,
     pub output: Option<String>,
     pub print0: bool,
+    /// `--expect`: what is written ahead of the rows, an empty line where no key sends them.
+    pub expect: Vec<String>,
 }
 
 /// A word as a POSIX shell reads it back: bare when it is safe, in single quotes otherwise.
@@ -69,6 +71,10 @@ pub fn command_line(recipe: &Recipe) -> String {
     if recipe.print0 {
         words.push("--print0".to_string());
     }
+    if !recipe.expect.is_empty() {
+        words.push("--expect".to_string());
+        words.push(shell_quote(&recipe.expect.join(",")));
+    }
     words.join(" ")
 }
 
@@ -109,9 +115,10 @@ mod tests {
                 fuzzy: true,
                 field: Some(vec!["1".to_string()]),
                 print0: true,
+                expect: vec!["ctrl-o".to_string(), "f5".to_string()],
                 ..Recipe::default()
             }),
-            "pickpen --delimiter : --read0 --where '2>10' --fuzzy --field 1 --print0"
+            "pickpen --delimiter : --read0 --where '2>10' --fuzzy --field 1 --print0 --expect ctrl-o,f5"
         );
     }
 }

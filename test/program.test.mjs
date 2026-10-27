@@ -315,6 +315,38 @@ test("a preview runs with no terminal and no stdin", () => {
   assert.equal(preview.status, 0);
 });
 
+test("a preview's {q} is the query, and {+} the marked rows", () => {
+  const { log } = pane(`printf 'one\\ntwo\\n' | pickpen --preview 'echo {q} / {+} / {}'`, [
+    ["boot", {}],
+    ["query", { query: "o" }],
+    ["mark", { ids: [1], on: true }],
+    ["preview", { id: 0, width: 40 }],
+    ["cancel", {}],
+  ]);
+  assert.equal(results(log).at(-2).text, "o / two / one\n");
+});
+
+test("--expect: the key that sent goes ahead of the rows, an empty line for Enter and --where", async () => {
+  const input = "ok one\nerror two\nerror three\n";
+  const headless = await run(["--where", "error", "--expect", "ctrl-o,F5"], input);
+  assert.equal(headless.status, 0, headless.err);
+  assert.equal(headless.out, "\nerror two\nerror three\n");
+  for (const [key, first] of [
+    [undefined, ""],
+    ["ctrl-o", "ctrl-o"],
+  ]) {
+    const shown = pane(`printf ${q(input)} | pickpen --expect ctrl-o,F5`, [
+      ["boot", {}],
+      ["query", { query: "error" }],
+      ["mark_shown", { on: true }],
+      ["choose", { marked: true, key }],
+    ]);
+    assert.equal(shown.status, 0, shown.err);
+    assert.equal(shown.out, `${first}\nerror two\nerror three\n`);
+  }
+  assert.equal((await run(["--where", "x", "--expect", "alt-x"], input)).status, 64);
+});
+
 test("Send nothing writes nothing and ends with 1", () => {
   const { out, status, err } = pane("printf 'a\\nb\\n' | pickpen", [
     ["boot", {}],

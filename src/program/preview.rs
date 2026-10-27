@@ -1,5 +1,6 @@
 //! `--preview`: the command run for the row the cursor is on, on the program's machine, with what
-//! it prints shown beside the rows.
+//! it prints shown beside the rows. Its braces are filled from the row, the query and the marked
+//! rows (`command_for`).
 //!
 //! Every process of a pipeline shares the pane's terminal, and the terminal's answers to the program
 //! arrive on it (pencere §13). So the command runs in a session of its own, with no controlling
@@ -30,8 +31,39 @@ pub struct Preview {
     pub timed_out: bool,
 }
 
-/// The command with the row's values in place of `{}`, `{COLUMN}` and `{2}`, each quoted for sh.
-pub fn command_for(template: &str, record: &Record, source: &Source<'_>) -> String {
+/// What a command's braces are filled from: the row the cursor is on, the query, and the marked
+/// rows, which are the cursor's row when none is marked (as fzf's `{+}` is).
+pub struct Fill<'a> {
+    pub record: &'a Record,
+    pub query: &'a str,
+    pub marked: &'a [&'a Record],
+    pub source: Source<'a>,
+}
+
+/// What one `{…}` stands for, quoted for sh, or none for a name nothing has: `{}`, `{COLUMN}` and
+/// `{2}` the row and its cells; `{q}` the query, whatever the columns are named; and `{+}`,
+/// `{+COLUMN}` and `{+2}` the same of each marked row, a word each.
+fn filled(name: &str, fill: &Fill<'_>) -> Option<String> {
+    if name == "q" {
+        return Some(shell_quote(fill.query));
+    }
+    let Some(name) = name.strip_prefix('+') else {
+        return part_of(fill.record, name, &fill.source).map(|part| shell_quote(&part));
+    };
+    let rows = if fill.marked.is_empty() {
+        std::slice::from_ref(&fill.record)
+    } else {
+        fill.marked
+    };
+    let parts: Option<Vec<String>> = rows
+        .iter()
+        .map(|record| part_of(record, name, &fill.source).map(|part| shell_quote(&part)))
+        .collect();
+    parts.map(|parts| parts.join(" "))
+}
+
+/// The command with each `{…}` filled (`filled`); one that names nothing is left as it is.
+pub fn command_for(template: &str, fill: &Fill<'_>) -> String {
     let mut out = String::with_capacity(template.len());
     let mut rest = template;
     while let Some(open) = rest.find('{') {
@@ -40,8 +72,8 @@ pub fn command_for(template: &str, record: &Record, source: &Source<'_>) -> Stri
             Some(close) if after.as_bytes().get(close) == Some(&b'}') => {
                 let name = &after[..close];
                 out.push_str(&rest[..open]);
-                match part_of(record, name, source) {
-                    Some(part) => out.push_str(&shell_quote(&part)),
+                match filled(name, fill) {
+                    Some(part) => out.push_str(&part),
                     None => {
                         out.push('{');
                         out.push_str(name);
@@ -176,6 +208,35 @@ fn unsafe_session(command: &mut Command) -> &mut Command {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_braces_are_the_row_the_query_and_the_marked_rows_each_quoted() {
+        let row = |raw: &str| Record {
+            raw: raw.to_string(),
+            cells: raw.split(' ').map(str::to_string).collect(),
+            value: None,
+        };
+        let (cursor, one, two) = (row("a b"), row("c d"), row("it's e"));
+        let names = ["q".to_string(), "x".to_string()];
+        let source = Source {
+            format: Some(crate::input::Format::Columns),
+            names: &names,
+            heading: None,
+        };
+        let marked = [&one, &two];
+        let mut fill = Fill {
+            record: &cursor,
+            query: "a b",
+            marked: &marked,
+            source,
+        };
+        assert_eq!(
+            command_for("show {} {x} {2} {q} {+} {+1} {nope}", &fill),
+            "show 'a b' b b 'a b' 'c d' 'it'\\''s e' c 'it'\\''s' {nope}"
+        );
+        fill.marked = &[];
+        assert_eq!(command_for("{+x}", &fill), "b");
+    }
 
     #[test]
     fn a_preview_says_what_the_command_printed_and_how_it_ended() {
