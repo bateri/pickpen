@@ -17,11 +17,6 @@ local R = {}
 
 -- The most of a cell drawn; a longer one is cut where it would not be seen anyway.
 local DRAWN = 400
--- The host scrolls the rows made at once and the page catches up a frame or two later, so more is
--- made than is in sight: a screen of rows the way the list goes and half a screen the other way.
--- The page is built again only when what is in sight comes within half a screen of an end of what
--- was made, not at every turn of the wheel.
-local AHEAD, BEHIND, NEAR = 1.5, 0.5, 0.75
 -- Points of columns made beyond the edges of the list, so that a column coming into sight is there.
 local OVERSCAN_X = 60
 
@@ -30,18 +25,19 @@ local QUANTITIES = { number = true, size = true, duration = true }
 -- How big the list's box was laid out, from the last frame (`settle` keeps it).
 R.view = { w = 800, h = 400 }
 
--- The rows the last build made (`{ first =, last =, shown = }`), and how far across the list was
+-- Which rows the last build made, and which way the list goes (the kit's: more is made the way it
+-- goes, and it is built again only near the end of what was made); and how far across the list was
 -- when the columns in sight were made.
-local made, made_x = nil, 0
+local built = pencere.Built.new()
+local made_x = 0
 
--- Which way the list last went, and where it was then: the way is changed only by a move, so that
--- asking again at the same place (the build that a move asked for) finds the way it went.
-local going_down, seen_at = true, 0
-local function went(oy)
-	if oy ~= seen_at then
-		going_down = oy > seen_at
-		seen_at = oy
-	end
+-- The list's rows: all of one height, however many.
+local function rows_of()
+	return pencere.Rows.even(S.sum.shown, SIZE.row)
+end
+
+local function view_h()
+	return math.max(R.view.h, SIZE.row)
 end
 
 -- Whether the list `ox` points across has moved far enough from where its columns were made for
@@ -50,44 +46,10 @@ function R.across_changed(ox)
 	return math.abs(ox - made_x) > OVERSCAN_X / 2
 end
 
--- The rows in sight with the list `oy` points down.
-local function in_sight(oy)
-	local view_h = math.max(R.view.h, SIZE.row)
-	local first = math.max(1, math.floor(oy / SIZE.row) + 1)
-	local last = math.min(S.sum.shown, math.ceil((oy + view_h) / SIZE.row))
-	return first, last, math.ceil(view_h / SIZE.row)
-end
-
--- Whether the rows in sight with the list `oy` points down are near the end of the rows made the way
--- the list goes (or past either end), so the page is to be built again.
-function R.near_end(oy)
-	went(oy)
-	if made == nil or made.shown ~= S.sum.shown then
-		return true
-	end
-	local first, last, screen = in_sight(oy)
-	local near = math.ceil(screen * NEAR)
-	if first < made.first or last > made.last then
-		return true
-	end
-	if going_down then
-		return made.last < made.shown and last + near > made.last
-	end
-	return made.first > 1 and first - near < made.first
-end
-
--- The rows to make with the list `oy` points down: those made already while they still hold what is
--- in sight with room, else a new span around it, longer the way the list goes.
-local function span(oy)
-	local shown = S.sum.shown
-	if not R.near_end(oy) then
-		return made.first, made.last
-	end
-	local first, last, screen = in_sight(oy)
-	local before = math.ceil(screen * (going_down and BEHIND or AHEAD))
-	local after = math.ceil(screen * (going_down and AHEAD or BEHIND))
-	made = { first = math.max(1, first - before), last = math.min(shown, last + after), shown = shown }
-	return made.first, made.last
+-- Whether the list scrolled to `oy` down is to be built again: what is in sight is past the rows
+-- made, or near their end the way the list goes.
+function R.stale(oy)
+	return built:stale(rows_of(), oy, view_h())
 end
 
 function R.is_quantity(column)
@@ -354,9 +316,8 @@ function R.view_of()
 	local layout = { columns = columns, visible = visible, skipped = skipped, total = total, words = words_of() }
 	R.last_layout = layout
 	local shown = sum.shown
-	local view_h = math.max(R.view.h, SIZE.row)
-	local first, last = span(oy)
-	A.set_page_rows(math.floor(view_h / SIZE.row))
+	local first, last = built:span(rows_of(), oy, view_h())
+	A.set_page_rows(math.floor(view_h() / SIZE.row))
 	A.need(first, last)
 
 	local list = b.div():id("rows"):col():grow(1):min_h(0):scroll():family("terminal"):text_size(SIZE.cell)

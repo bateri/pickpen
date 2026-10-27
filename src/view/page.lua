@@ -715,7 +715,7 @@ local function on_scrolled(event)
 				S.unseen, seen = 0, true
 			end
 			-- The rows made hold what is in sight: the host has moved them, and nothing is to be built.
-			return R.near_end(box.y) or R.across_changed(box.x) or seen
+			return R.stale(box.y) or R.across_changed(box.x) or seen
 		end
 	end
 	return false
