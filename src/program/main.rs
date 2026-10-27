@@ -113,12 +113,12 @@ fn choose(run: Run, stream: Box<dyn Read + Send>) -> ExitCode {
     };
     let shared = Shared::new(Picker::new(&run.query, rule));
     let feed = shared.clone();
-    let given = run.input;
+    let cut = run.cut.clone();
     std::thread::spawn(move || {
         let mut sink = Feed {
             shared: feed.clone(),
         };
-        if let Err(why) = input::read(stream, given, &mut sink) {
+        if let Err(why) = input::read(stream, cut, &mut sink) {
             sink.problem(format!(
                 "The input could not be read: {}",
                 args::os_words(&why)
@@ -162,7 +162,7 @@ fn choose(run: Run, stream: Box<dyn Read + Send>) -> ExitCode {
             .iter()
             .map(|&id| &picker.records[id as usize])
             .collect();
-        let text = output::render(&records, &shape, &picker.source());
+        let text = output::render(&records, &shape, &picker.source(), run.print0);
         return headless::write_all(text.as_bytes(), 0);
     }
     if *shared

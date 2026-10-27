@@ -28,8 +28,12 @@ pub enum Format {
     Columns,
     Jsonl,
     Json,
+    /// Lines cut into columns at the text `--delimiter` gives: never read from the first lines,
+    /// and not one `--input` names.
+    Split,
 }
 
+/// The shapes `--input` names.
 pub const FORMATS: [Format; 6] = [
     Format::Lines,
     Format::Csv,
@@ -48,11 +52,33 @@ impl Format {
             Format::Columns => "columns",
             Format::Jsonl => "jsonl",
             Format::Json => "json",
+            Format::Split => "split",
         }
     }
 
     pub fn from_name(name: &str) -> Option<Format> {
         FORMATS.into_iter().find(|f| f.name() == name)
+    }
+}
+
+/// How the input is cut into rows and cells, as the command line says: its shape, or none to read
+/// it from the first lines; the text each line's columns are cut at (`--delimiter`), which makes
+/// the shape `Split`; and whether rows end at NUL rather than at a line end (`--read0`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Cut {
+    pub format: Option<Format>,
+    pub delimiter: Option<String>,
+    pub nul: bool,
+}
+
+#[cfg(test)]
+impl Cut {
+    /// The input in this shape, or in the shape its first lines have.
+    pub fn shape(format: Option<Format>) -> Cut {
+        Cut {
+            format,
+            ..Cut::default()
+        }
     }
 }
 
@@ -163,7 +189,7 @@ const PIECE: usize = 64 * 1024;
 
 /// Text in, records out: the shape told from a sample, then each record as its text comes.
 pub struct Reader {
-    format: Option<Format>,
+    cut: Cut,
     buffer: String,
     /// The buffer's length in UTF-16 code units, and its line ends.
     units: usize,
@@ -174,9 +200,9 @@ pub struct Reader {
 }
 
 impl Reader {
-    pub fn new(format: Option<Format>) -> Reader {
+    pub fn new(cut: Cut) -> Reader {
         Reader {
-            format,
+            cut,
             buffer: String::new(),
             units: 0,
             lines: 0,
@@ -188,7 +214,7 @@ impl Reader {
 
     /// The shape, once it is settled.
     pub fn format(&self) -> Option<Format> {
-        if self.decided { self.format } else { None }
+        if self.decided { self.cut.format } else { None }
     }
 
     /// Text as it comes.
@@ -200,7 +226,7 @@ impl Reader {
         self.buffer.push_str(text);
         self.units += utf16_len(text);
         self.lines += text.bytes().filter(|b| *b == b'\n').count();
-        if self.format.is_some() || self.units >= SAMPLE_BYTES || self.lines >= SAMPLE_LINES {
+        if self.cut.format.is_some() || self.units >= SAMPLE_BYTES || self.lines >= SAMPLE_LINES {
             self.decide(sink);
         }
     }
@@ -218,9 +244,12 @@ impl Reader {
         }
         self.decided = true;
         let text = std::mem::take(&mut self.buffer);
-        let format = *self.format.get_or_insert_with(|| detect(&text, self.ended));
+        let format = *self
+            .cut
+            .format
+            .get_or_insert_with(|| detect(&text, self.ended));
         sink.format(format);
-        let mut parser = Parser::new(format);
+        let mut parser = Parser::new(format, &self.cut);
         parser.feed(&text, sink);
         self.parser = Some(parser);
     }
@@ -242,11 +271,7 @@ impl Reader {
 /// as Node decodes UTF-8 (a sequence that is not UTF-8 becomes U+FFFD). The shape is told once
 /// the sample is full or the input has ended, or `DECIDE_AFTER` after the first line came, so
 /// that `tail -f` is not waited on.
-pub fn read(
-    input: impl Read + Send + 'static,
-    given: Option<Format>,
-    sink: &mut dyn Sink,
-) -> io::Result<()> {
+pub fn read(input: impl Read + Send + 'static, cut: Cut, sink: &mut dyn Sink) -> io::Result<()> {
     let (send, pieces) = mpsc::sync_channel::<io::Result<Vec<u8>>>(1);
     std::thread::spawn(move || {
         let mut input = input;
@@ -268,7 +293,7 @@ pub fn read(
         }
     });
 
-    let mut reader = Reader::new(given);
+    let mut reader = Reader::new(cut);
     let mut decoder = Decoder::default();
     let mut timer: Option<Instant> = None;
     let mut timed = false;
@@ -737,6 +762,7 @@ enum Parser {
     },
     Columns(ColumnsParser),
     Delimited(DelimitedParser),
+    Split(SplitParser),
     JsonLines {
         lines: LineParser,
         keys: Keys,
@@ -746,15 +772,19 @@ enum Parser {
 }
 
 impl Parser {
-    fn new(format: Format) -> Parser {
+    fn new(format: Format, cut: &Cut) -> Parser {
         match format {
             Format::Lines => Parser::Lines {
-                lines: LineParser::default(),
+                lines: LineParser::new(cut.nul),
                 started: false,
             },
             Format::Columns => Parser::Columns(ColumnsParser::default()),
             Format::Csv => Parser::Delimited(DelimitedParser::new(',')),
             Format::Tsv => Parser::Delimited(DelimitedParser::new('\t')),
+            Format::Split => Parser::Split(SplitParser::new(
+                cut.delimiter.clone().unwrap_or_default(),
+                cut.nul,
+            )),
             Format::Jsonl => Parser::JsonLines {
                 lines: LineParser::default(),
                 keys: Keys::default(),
@@ -778,6 +808,7 @@ impl Parser {
             }
             Parser::Columns(parser) => parser.feed(text, sink),
             Parser::Delimited(parser) => parser.feed(text, sink),
+            Parser::Split(parser) => parser.feed(text, sink),
             Parser::JsonLines { lines, keys, bad } => {
                 for line in lines.feed(text) {
                     json_line(line, keys, bad, sink);
@@ -801,6 +832,7 @@ impl Parser {
             }
             Parser::Columns(parser) => parser.end(sink),
             Parser::Delimited(parser) => parser.end(sink),
+            Parser::Split(parser) => parser.end(sink),
             Parser::JsonLines { lines, keys, bad } => {
                 if let Some(line) = lines.end() {
                     json_line(line, keys, bad, sink);
@@ -819,17 +851,31 @@ fn start_lines(started: &mut bool, sink: &mut dyn Sink) {
     }
 }
 
-/// Whole lines, plain, without their endings; blank lines are skipped.
-#[derive(Default)]
+/// Whole lines, plain, without their endings; blank lines are skipped. With `--read0` a line ends
+/// at NUL, and may hold line ends of its own (a file's name can).
 struct LineParser {
     rest: String,
+    end: char,
+}
+
+impl Default for LineParser {
+    fn default() -> Self {
+        Self::new(false)
+    }
 }
 
 impl LineParser {
+    fn new(nul: bool) -> LineParser {
+        LineParser {
+            rest: String::new(),
+            end: if nul { '\0' } else { '\n' },
+        }
+    }
+
     /// The lines this piece completes.
     fn feed(&mut self, text: &str) -> Vec<String> {
         let mut lines = Vec::new();
-        let mut pieces = text.split('\n');
+        let mut pieces = text.split(self.end);
         let Some(first) = pieces.next() else {
             return lines;
         };
@@ -917,6 +963,80 @@ impl ColumnsParser {
             });
         }
         self.layout = Some(layout);
+    }
+}
+
+/// Lines cut into columns at the text `--delimiter` gives, with no heading: the columns are named
+/// by their places (`1`, `2`, `3`), as `--field 2` and `{2}` count them. There are as many as the
+/// first lines that are cut at all have at the fewest, and the last takes the rest of the line, so
+/// that grep's `file:line:text` stays three columns when the text holds a colon of its own. The
+/// count is read from what the first piece brought, as a table's columns are.
+struct SplitParser {
+    lines: LineParser,
+    delimiter: String,
+    waiting: Vec<String>,
+    count: Option<usize>,
+}
+
+impl SplitParser {
+    fn new(delimiter: String, nul: bool) -> SplitParser {
+        SplitParser {
+            lines: LineParser::new(nul),
+            delimiter,
+            waiting: Vec::new(),
+            count: None,
+        }
+    }
+
+    fn feed(&mut self, text: &str, sink: &mut dyn Sink) {
+        for line in self.lines.feed(text) {
+            self.line(line, sink);
+        }
+        self.settle(false, sink);
+    }
+
+    fn end(&mut self, sink: &mut dyn Sink) {
+        if let Some(line) = self.lines.end() {
+            self.line(line, sink);
+        }
+        self.settle(true, sink);
+    }
+
+    fn line(&mut self, line: String, sink: &mut dyn Sink) {
+        match self.count {
+            Some(count) => sink.record(self.record(line, count)),
+            None => self.waiting.push(line),
+        }
+    }
+
+    fn record(&self, line: String, count: usize) -> Record {
+        Record {
+            cells: line
+                .splitn(count, self.delimiter.as_str())
+                .map(str::to_string)
+                .collect(),
+            raw: line,
+            value: None,
+        }
+    }
+
+    fn settle(&mut self, ended: bool, sink: &mut dyn Sink) {
+        if self.count.is_some() || (self.waiting.is_empty() && !ended) {
+            return;
+        }
+        let count = self
+            .waiting
+            .iter()
+            .take(200)
+            .map(|line| line.matches(self.delimiter.as_str()).count() + 1)
+            .filter(|&n| n > 1)
+            .min()
+            .unwrap_or(1);
+        sink.columns((1..=count).map(|n| n.to_string()).collect(), None);
+        for line in std::mem::take(&mut self.waiting) {
+            sink.record(self.record(line, count));
+        }
+        self.count = Some(count);
     }
 }
 

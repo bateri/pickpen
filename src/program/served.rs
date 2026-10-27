@@ -129,6 +129,8 @@ fn again(picker: &Picker, run: &Run, fields: Option<&[String]>) -> Value {
     let line_for = |where_: &str| {
         command_line(&Recipe {
             input: run.given.input.clone(),
+            delimiter: run.given.delimiter.clone(),
+            read0: run.given.read0,
             where_: where_.to_owned(),
             sort: picker.order.map(|o| {
                 (
@@ -139,6 +141,7 @@ fn again(picker: &Picker, run: &Run, fields: Option<&[String]>) -> Value {
             field: field.clone().filter(|f| !f.is_empty()),
             format: run.given.format.clone(),
             output: run.given.output.clone(),
+            print0: run.given.print0,
         })
     };
     let candidates = picker.again_candidates();
@@ -214,6 +217,9 @@ pub fn serve(
             "preview": r.preview,
             "given": {
                 "input": r.given.input,
+                "delimiter": r.given.delimiter,
+                "read0": r.given.read0,
+                "print0": r.given.print0,
                 "field": r.given.field,
                 "format": r.given.format,
                 "output": r.given.output,
@@ -444,7 +450,7 @@ pub fn serve(
                     .take(OUTPUT_ROWS)
                     .map(|&id| &picker.records[id as usize])
                     .collect();
-                out["text"] = json!(output::render(&records, &shape, &picker.source()));
+                out["text"] = json!(output::render(&records, &shape, &picker.source(), r.print0));
             }
         }
         Ok(out)

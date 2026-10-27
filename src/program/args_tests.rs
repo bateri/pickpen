@@ -87,7 +87,7 @@ fn the_options_are_read_as_they_were_given() {
             descending: false
         })
     );
-    assert_eq!(o.input, Some(Format::Csv));
+    assert_eq!(o.cut.format, Some(Format::Csv));
     assert_eq!(o.given.input.as_deref(), Some("csv"));
     assert_eq!(o.query, "web");
     assert_eq!(o.file, None);
@@ -113,6 +113,36 @@ fn the_options_are_read_as_they_were_given() {
     assert_eq!(o.given.output.as_deref(), Some("jsonl"));
     assert!(o.confirm);
     assert_eq!(o.where_.as_deref(), Some("x"));
+}
+
+#[test]
+fn a_delimiter_rows_ending_at_nul_and_rows_written_so() {
+    let o = options(&["-d", ":", "--read0", "--print0"]);
+    assert_eq!(
+        o.cut,
+        Cut {
+            format: Some(Format::Split),
+            delimiter: Some(":".to_string()),
+            nul: true
+        }
+    );
+    assert!(o.print0 && o.given.print0 && o.given.read0);
+    assert_eq!(o.given.delimiter.as_deref(), Some(":"));
+    assert_eq!(options(&["-d", "\\t"]).cut.delimiter.as_deref(), Some("\t"));
+    assert_eq!(options(&["--read0"]).cut.format, Some(Format::Lines));
+    assert_eq!(
+        options(&["--read0", "-i", "lines"]).cut.format,
+        Some(Format::Lines)
+    );
+    assert_eq!(
+        error(&["-d", ":", "-i", "csv"]),
+        "give one of --input and --delimiter"
+    );
+    assert_eq!(
+        error(&["--read0", "-i", "json"]),
+        "--read0 reads lines, cut at --delimiter or not, not --input json"
+    );
+    assert_eq!(error(&["-d", ""]), "--delimiter is empty");
 }
 
 #[test]

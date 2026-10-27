@@ -24,7 +24,10 @@ the one array of objects an answer holds, as `kubectl get -o json` and most APIs
 tables commands line up with spaces — `ps aux`, `docker ps`, `kubectl get`, `df -h` — cut into
 their columns as they line them up, `Up 2 hours` and `/usr/bin/foo --bar` staying one cell
 each. The shape is read from the first lines; `--input` says it when it would be read wrong.
-Rows show as they arrive, so `tail -f app.log | pickpen` works.
+`--delimiter :` cuts each line into columns `1`, `2`, `3` at a text, the last taking the rest of
+the line, so that `grep -n`'s `file:line:text` stays three columns when the text holds a colon;
+`--read0` reads rows that end at NUL, as `find -print0` writes them. Rows show as they arrive, so
+`tail -f app.log | pickpen` works.
 
 **Typing filters.** What you type always goes to the query, so there is nothing to press before
 you search. Words are looked for in every column; a column can be compared by its heading, and
@@ -53,8 +56,9 @@ drawn by the program with the same function that writes them. By default a row g
 came in — a line as its line, a table's row without the heading (so `xargs` gets only rows), CSV
 after its heading, JSON lines as lines, a JSON document as an array of the elements chosen.
 `--field NAME,PID` writes columns tab-separated (`--field 1` is the first word of a line, as in
-awk), `--format 'kill {PID}'` fills a template, `--output json` converts. Right-click a heading
-to send only that column.
+awk), `--format 'kill {PID}'` fills a template, `--output json` converts, and `--print0` ends
+each row with NUL rather than a line end, for `xargs -0`. Right-click a heading to send only that
+column.
 
 **And how to do it again, with nobody to ask.** The same panel shows the command line that
 chooses the same rows in a script or in cron — the query as `--where`, the order as `--sort`, the

@@ -4,7 +4,8 @@
 //! In the input's shape, a row goes out as the text it was read from: lines and columns as their
 //! lines (a table's heading stays behind, so that `| xargs` is given only rows), CSV and TSV after
 //! their heading, JSON lines as their lines, and a JSON document as an array of the elements
-//! chosen. `--field`, `--format` and `--output` shape it otherwise.
+//! chosen. `--field`, `--format` and `--output` shape it otherwise, and `--print0` ends each row
+//! with NUL rather than a line end.
 
 use serde_json::{Map, Value};
 
@@ -151,12 +152,18 @@ fn object_of(record: &Record, names: &[String]) -> Value {
     Value::Object(js_ordered(object))
 }
 
-/// Where the output ends a line: every line it writes ends with one.
-fn lines(items: impl IntoIterator<Item = String>) -> String {
+/// What ends each row that goes out: a line end, or NUL with `--print0` (`xargs -0` reads that).
+/// A heading ends as a row does, and a JSON document is one row.
+fn end_of(nul: bool) -> &'static str {
+    if nul { "\0" } else { "\n" }
+}
+
+/// Each item, ended as a row is: every one the output writes ends so.
+fn lines(items: impl IntoIterator<Item = String>, end: &str) -> String {
     let mut out = String::new();
     for item in items {
         out.push_str(&item);
-        out.push('\n');
+        out.push_str(end);
     }
     out
 }
@@ -171,63 +178,81 @@ fn heading_of(source: &Source, format: Format) -> String {
     }
 }
 
-/// The rows as they go out; nothing at all for no rows.
-pub fn render(records: &[&Record], shape: &Shape, source: &Source) -> String {
+/// The rows as they go out, each ended as `nul` says (`end_of`); nothing at all for no rows.
+pub fn render(records: &[&Record], shape: &Shape, source: &Source, nul: bool) -> String {
     if records.is_empty() {
         return String::new();
     }
+    let end = end_of(nul);
     match shape {
-        Shape::Fields(fields) => lines(records.iter().map(|r| {
-            let parts: Vec<String> = fields
-                .iter()
-                .map(|name| part_of(r, name, source).unwrap_or_default())
-                .collect();
-            parts.join("\t")
-        })),
-        Shape::Template(template) => {
-            lines(records.iter().map(|r| fill_template(template, r, source)))
-        }
-        Shape::As(format) => render_as(*format, records, source.names),
+        Shape::Fields(fields) => lines(
+            records.iter().map(|r| {
+                let parts: Vec<String> = fields
+                    .iter()
+                    .map(|name| part_of(r, name, source).unwrap_or_default())
+                    .collect();
+                parts.join("\t")
+            }),
+            end,
+        ),
+        Shape::Template(template) => lines(
+            records.iter().map(|r| fill_template(template, r, source)),
+            end,
+        ),
+        Shape::As(format) => render_as(*format, records, source.names, end),
         Shape::Input => match source.format {
             Some(format @ (Format::Csv | Format::Tsv)) => {
-                lines([heading_of(source, format)]) + &lines(records.iter().map(|r| r.raw.clone()))
+                lines([heading_of(source, format)], end)
+                    + &lines(records.iter().map(|r| r.raw.clone()), end)
             }
             Some(Format::Json) => {
                 let items: Vec<String> = records.iter().map(|r| format!("  {}", r.raw)).collect();
-                format!("[\n{}\n]\n", items.join(",\n"))
+                format!("[\n{}\n]{end}", items.join(",\n"))
             }
-            _ => lines(records.iter().map(|r| r.raw.clone())),
+            _ => lines(records.iter().map(|r| r.raw.clone()), end),
         },
     }
 }
 
-fn render_as(format: As, records: &[&Record], names: &[String]) -> String {
-    let row = |r: &Record, cell: fn(&str) -> String, by: &str| {
-        let cells: Vec<String> = (0..names.len()).map(|at| cell(cell_of(r, at))).collect();
-        cells.join(by)
-    };
+/// The cells of `--output csv` or `tsv`, quoted or flattened as each needs, and what is between them.
+fn cells_as(format: As) -> (fn(&str) -> String, &'static str) {
+    if format == As::Tsv {
+        (tsv_cell, "\t")
+    } else {
+        (csv_cell, ",")
+    }
+}
+
+/// The heading of `--output csv` or `tsv`, without its end.
+fn heading_as(format: As, names: &[String]) -> String {
+    let (cell, by) = cells_as(format);
+    let heading: Vec<String> = names.iter().map(|n| cell(n)).collect();
+    heading.join(by)
+}
+
+/// One row of `--output csv` or `tsv`, without its end.
+fn row_as(format: As, record: &Record, names: &[String]) -> String {
+    let (cell, by) = cells_as(format);
+    let cells: Vec<String> = (0..names.len())
+        .map(|at| cell(cell_of(record, at)))
+        .collect();
+    cells.join(by)
+}
+
+fn render_as(format: As, records: &[&Record], names: &[String], end: &str) -> String {
     match format {
-        As::Csv => {
-            let heading: Vec<String> = names.iter().map(|n| csv_cell(n)).collect();
-            lines(
-                std::iter::once(heading.join(","))
-                    .chain(records.iter().map(|r| row(r, csv_cell, ","))),
-            )
-        }
-        As::Tsv => {
-            let heading: Vec<String> = names.iter().map(|n| tsv_cell(n)).collect();
-            lines(
-                std::iter::once(heading.join("\t"))
-                    .chain(records.iter().map(|r| row(r, tsv_cell, "\t"))),
-            )
-        }
-        As::Jsonl => lines(records.iter().map(|r| stringify(&object_of(r, names)))),
+        As::Csv | As::Tsv => lines(
+            std::iter::once(heading_as(format, names))
+                .chain(records.iter().map(|r| row_as(format, r, names))),
+            end,
+        ),
+        As::Jsonl => lines(records.iter().map(|r| stringify(&object_of(r, names))), end),
         As::Json => {
             let items: Vec<String> = records
                 .iter()
                 .map(|r| format!("  {}", stringify(&object_of(r, names))))
                 .collect();
-            format!("[\n{}\n]\n", items.join(",\n"))
+            format!("[\n{}\n]{end}", items.join(",\n"))
         }
     }
 }
@@ -255,33 +280,28 @@ pub fn streams(shape: &Shape, format: Option<Format>) -> bool {
 }
 
 /// What goes ahead of the first row when rows are written one by one.
-pub fn head(shape: &Shape, source: &Source) -> String {
+pub fn head(shape: &Shape, source: &Source, nul: bool) -> String {
+    let end = end_of(nul);
     match (shape, source.format) {
-        (Shape::As(As::Csv), _) => {
-            let names: Vec<String> = source.names.iter().map(|n| csv_cell(n)).collect();
-            lines([names.join(",")])
-        }
-        (Shape::As(As::Tsv), _) => {
-            let names: Vec<String> = source.names.iter().map(|n| tsv_cell(n)).collect();
-            lines([names.join("\t")])
+        (Shape::As(format @ (As::Csv | As::Tsv)), _) => {
+            lines([heading_as(*format, source.names)], end)
         }
         (Shape::Input, Some(format @ (Format::Csv | Format::Tsv))) => {
-            lines([heading_of(source, format)])
+            lines([heading_of(source, format)], end)
         }
         _ => String::new(),
     }
 }
 
 /// One row, as it goes out after `head` when rows are written one by one.
-pub fn one(record: &Record, shape: &Shape, source: &Source) -> String {
+pub fn one(record: &Record, shape: &Shape, source: &Source, nul: bool) -> String {
+    let end = end_of(nul);
     match (shape, source.format) {
-        (Shape::As(As::Csv | As::Tsv), _) => {
-            let all = render(&[record], shape, source);
-            let rest: Vec<&str> = all.split('\n').skip(1).collect();
-            rest.join("\n")
+        (Shape::As(format @ (As::Csv | As::Tsv)), _) => {
+            lines([row_as(*format, record, source.names)], end)
         }
-        (Shape::Input, Some(Format::Csv | Format::Tsv)) => format!("{}\n", record.raw),
-        _ => render(&[record], shape, source),
+        (Shape::Input, Some(Format::Csv | Format::Tsv)) => lines([record.raw.clone()], end),
+        _ => render(&[record], shape, source, nul),
     }
 }
 

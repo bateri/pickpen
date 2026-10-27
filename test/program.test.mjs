@@ -8,7 +8,7 @@
 
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
@@ -139,6 +139,7 @@ test("the command line is checked before anything is read", async () => {
   assert.equal((await run(["--field", "A", "--output", "json"])).status, 64);
   assert.equal((await run(["--output", "xml"])).status, 64);
   assert.equal((await run(["--input", "yaml"])).status, 64);
+  assert.equal((await run(["--delimiter", ":", "--input", "csv"])).status, 64);
   assert.equal((await run(["a", "b"])).status, 64);
   assert.equal((await run(["--where", "", "--field", "NOPE"], PODS)).status, 64);
   assert.equal((await run(["--where", "", "--sort", "NOPE"], PODS)).status, 64);
@@ -216,6 +217,37 @@ for (const [file, where, extra] of [
     assert.equal(shown.out, headless.out);
   });
 }
+
+test("--delimiter, --read0 and --print0: a view sending what --where matches writes what it writes", async () => {
+  const grep = join(dir, "grep.txt");
+  writeFileSync(grep, 'src/a.rs:12:let url = "http://x";\nsrc/b.rs:3:fn main() {\nsrc/c.rs:40:// done\n');
+  const names = join(dir, "names");
+  writeFileSync(names, "one file\0two\nlines\0three\0");
+  for (const [path, where, extra, wanted] of [
+    [grep, "2>10", ["--delimiter", ":", "--field", "1,3"], 'src/a.rs\tlet url = "http://x";\nsrc/c.rs\t// done\n'],
+    [names, "!three", ["--read0", "--print0"], "one file\0two\nlines\0"],
+  ]) {
+    const headless = await run(["--where", where, ...extra, path]);
+    assert.equal(headless.status, 0, headless.err);
+    assert.equal(headless.out, wanted);
+    const shown = pane(`pickpen ${extra.map(q).join(" ")} ${q(path)}`, [
+      ["boot", {}],
+      ["query", { query: where }],
+      ["mark_shown", { on: true }],
+      ["choose", { marked: true }],
+    ]);
+    assert.equal(shown.status, 0, shown.err);
+    assert.equal(shown.out, headless.out);
+  }
+  const { log } = pane(`pickpen -d : --print0 ${q(grep)}`, [
+    ["boot", {}],
+    ["query", { query: "2>10" }],
+    ["mark_shown", { on: true }],
+    ["output", {}],
+    ["cancel", {}],
+  ]);
+  assert.equal(results(log).at(-2).again.line, "pickpen --delimiter : --where '2>10' --print0");
+});
 
 test("the output panel shows what goes out, and the command line that does it again", () => {
   const { log } = pane(`pickpen --field NAME ${q(`${DEMO}pods.txt`)}`, [

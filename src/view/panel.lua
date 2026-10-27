@@ -428,14 +428,19 @@ local function output_tab(width)
 		:border(1, L.line2)
 		:min_h(34)
 		:scroll()
+	-- A row ended by NUL (--print0) is a line of its own here, with its NUL shown.
 	local lines = 0
-	for line in string.gmatch(out.text, "([^\n]*)\n") do
+	for line, ending in string.gmatch(out.text, "([^\n\0]*)([\n\0])") do
 		lines += 1
 		if lines > LINES_MOST then
 			text:child(T("…", "quiet"))
 			break
 		end
-		text:child(T(L.cut(line, 1000)):no_shrink())
+		if ending == "\0" then
+			text:child(b.div():row():no_shrink():child(T(L.cut(line, 1000))):child(T("␀", "quiet")))
+		else
+			text:child(T(L.cut(line, 1000)):no_shrink())
+		end
 	end
 	goes:child(text)
 	list:child(goes)

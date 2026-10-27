@@ -161,11 +161,18 @@ impl Sink for Headless<'_> {
         }
         if !self.headed {
             self.headed = true;
-            self.out
-                .write(&output::head(&self.run.shape, &self.source()));
+            self.out.write(&output::head(
+                &self.run.shape,
+                &self.source(),
+                self.run.print0,
+            ));
         }
-        self.out
-            .write(&output::one(&record, &self.run.shape, &self.source()));
+        self.out.write(&output::one(
+            &record,
+            &self.run.shape,
+            &self.source(),
+            self.run.print0,
+        ));
     }
 
     fn problem(&mut self, text: String) {
@@ -210,7 +217,7 @@ pub fn run(run: &Run, stream: Box<dyn Read + Send>) -> ExitCode {
         out: out.clone(),
         stop: None,
     };
-    let read = input::read(stream, run.input, &mut headless);
+    let read = input::read(stream, run.cut.clone(), &mut headless);
     if let Some((code, words)) = headless.stop.take() {
         out.flush();
         return quit(code, &words);
@@ -249,7 +256,7 @@ pub fn run(run: &Run, stream: Box<dyn Read + Send>) -> ExitCode {
             held = keyed.into_iter().map(|(_, record)| record).collect();
         }
         let records: Vec<&Record> = held.iter().collect();
-        rest = output::render(&records, &run.shape, &headless.source());
+        rest = output::render(&records, &run.shape, &headless.source(), run.print0);
     }
     write_all(rest.as_bytes(), if headless.count > 0 { 0 } else { 1 })
 }

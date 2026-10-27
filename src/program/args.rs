@@ -5,7 +5,7 @@
 //! Lengths of arguments are counted in characters, where Node counted UTF-16 code units: they
 //! differ only for an option of one character beyond U+FFFF, which is no option either way.
 
-use crate::input::{FORMATS, Format, quote_json};
+use crate::input::{Cut, FORMATS, Format, quote_json};
 use crate::output::{As, Shape};
 use crate::values::js_trim;
 
@@ -25,8 +25,12 @@ you choose in the terminal pane, and the rows you chose go out on stdout.
   -f, --field COLUMN,…   write these columns of each row, tab-separated
       --format TEMPLATE  write each row as TEMPLATE: {COLUMN}, {2}, {} the row
   -o, --output FORMAT    write csv, tsv, json or jsonl
+      --print0           end each row written with NUL, for xargs -0
   -i, --input FORMAT     read lines, csv, tsv, columns, jsonl or json
                          (without it, the shape is read from the first lines)
+  -d, --delimiter SEP    read lines cut into columns 1, 2, … at SEP ('\\t' a tab),
+                         the last taking the rest of the line: -d : for grep -n
+      --read0            rows end at NUL, as find -print0 writes them
   -p, --preview COMMAND  show what COMMAND prints for the row the cursor is on;
                          {} {COLUMN} {2} stand for the row and its cells
   -t, --title TEXT       a line above the rows, saying what they are for
@@ -46,9 +50,12 @@ was no terminal that shows pencere views, 64 the command line was wrong,
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Given {
     pub input: Option<String>,
+    pub delimiter: Option<String>,
+    pub read0: bool,
     pub field: Option<Vec<String>>,
     pub format: Option<String>,
     pub output: Option<String>,
+    pub print0: bool,
 }
 
 /// `--sort`: the column, and whether the order is the other way (`-COLUMN`).
@@ -68,7 +75,9 @@ pub struct Run {
     pub confirm: bool,
     pub sort: Option<Sort>,
     pub shape: Shape,
-    pub input: Option<Format>,
+    /// `--print0`: each row written ends with NUL rather than a line end.
+    pub print0: bool,
+    pub cut: Cut,
     pub preview: Option<String>,
     pub title: Option<String>,
     pub given: Given,
@@ -91,7 +100,7 @@ enum Kind {
 
 /// The options, as `parseArgs` was given them: long name, short name, kind, and whether it may
 /// be given more than once.
-const OPTIONS: [(&str, char, Kind, bool); 12] = [
+const OPTIONS: [(&str, char, Kind, bool); 15] = [
     ("query", 'q', Kind::Text, false),
     ("where", 'w', Kind::Text, false),
     ("confirm", 'c', Kind::Flag, false),
@@ -99,7 +108,10 @@ const OPTIONS: [(&str, char, Kind, bool); 12] = [
     ("field", 'f', Kind::Text, true),
     ("format", '\0', Kind::Text, false),
     ("output", 'o', Kind::Text, false),
+    ("print0", '\0', Kind::Flag, false),
     ("input", 'i', Kind::Text, false),
+    ("delimiter", 'd', Kind::Text, false),
+    ("read0", '\0', Kind::Flag, false),
     ("preview", 'p', Kind::Text, false),
     ("title", 't', Kind::Text, false),
     ("help", 'h', Kind::Flag, false),
@@ -383,6 +395,30 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
         };
         input = Some(format);
     }
+    let given_delimiter = values.text("delimiter");
+    // `\t` as fzf and awk users write a tab.
+    let delimiter = given_delimiter.as_deref().map(|d| match d {
+        "\\t" => "\t".to_string(),
+        d => d.to_string(),
+    });
+    if delimiter.as_deref() == Some("") {
+        return Err("--delimiter is empty".to_string());
+    }
+    if delimiter.is_some() {
+        if input.is_some() {
+            return Err("give one of --input and --delimiter".to_string());
+        }
+        input = Some(Format::Split);
+    }
+    let read0 = values.flag("read0");
+    if read0 {
+        if let Some(name) = given_input.as_deref().filter(|name| *name != "lines") {
+            return Err(format!(
+                "--read0 reads lines, cut at --delimiter or not, not --input {name}"
+            ));
+        }
+        input.get_or_insert(Format::Lines);
+    }
 
     let mut sort = None;
     if let Some(given) = values.text("sort") {
@@ -406,11 +442,18 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
         confirm: values.flag("confirm"),
         sort,
         shape,
-        input,
+        print0: values.flag("print0"),
+        cut: Cut {
+            format: input,
+            delimiter,
+            nul: read0,
+        },
         preview: values.text("preview"),
         title: values.text("title"),
         given: Given {
             input: given_input,
+            delimiter: given_delimiter,
+            read0,
             field: if fields.is_empty() {
                 None
             } else {
@@ -418,6 +461,7 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
             },
             format,
             output,
+            print0: values.flag("print0"),
         },
     }))
 }

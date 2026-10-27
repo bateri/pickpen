@@ -37,7 +37,7 @@ impl Table {
     }
 
     fn render(&self, shape: &Shape) -> String {
-        render(&self.all(), shape, &self.source())
+        render(&self.all(), shape, &self.source(), false)
     }
 }
 
@@ -48,7 +48,7 @@ fn table(text: &str) -> Table {
         names: Vec::new(),
         heading: None,
     };
-    let mut reader = Reader::new(None);
+    let mut reader = Reader::new(crate::input::Cut::default());
     reader.feed(text, &mut t);
     reader.end(&mut t);
     t.format = reader.format();
@@ -82,7 +82,7 @@ fn in_the_inputs_shape_a_row_goes_out_as_the_text_it_was_read_from() {
     // A table's heading stays behind, so that what reads the rows is given only rows.
     let pods = pods();
     assert_eq!(
-        render(&pods.all()[1..], &Shape::Input, &pods.source()),
+        render(&pods.all()[1..], &Shape::Input, &pods.source(), false),
         "web-2    Error\n"
     );
     let jsonl = jsonl();
@@ -95,7 +95,8 @@ fn in_the_inputs_shape_a_row_goes_out_as_the_text_it_was_read_from() {
         render(
             &[&json.records[2], &json.records[0]],
             &Shape::Input,
-            &json.source()
+            &json.source(),
+            false
         ),
         "[\n  {\"a\":3},\n  {\"a\":1}\n]\n"
     );
@@ -109,7 +110,7 @@ fn in_the_inputs_shape_a_row_goes_out_as_the_text_it_was_read_from() {
 fn nothing_chosen_writes_nothing_at_all() {
     let csv = csv();
     for shape in [Shape::Input, Shape::As(As::Json), fields(&["note"])] {
-        assert_eq!(render(&[], &shape, &csv.source()), "");
+        assert_eq!(render(&[], &shape, &csv.source(), false), "");
     }
 }
 
@@ -202,13 +203,34 @@ fn rows_written_one_by_one_come_to_what_rendering_them_all_at_once_writes() {
     ];
     for (t, shape) in &cases {
         assert!(streams(shape, t.format));
-        let mut piecewise = head(shape, &t.source());
-        for r in &t.records {
-            piecewise += &one(r, shape, &t.source());
+        for nul in [false, true] {
+            let mut piecewise = head(shape, &t.source(), nul);
+            for r in &t.records {
+                piecewise += &one(r, shape, &t.source(), nul);
+            }
+            assert_eq!(piecewise, render(&t.all(), shape, &t.source(), nul));
         }
-        assert_eq!(piecewise, t.render(shape));
     }
     assert!(!streams(&Shape::As(As::Json), Some(Format::Csv)));
+}
+
+#[test]
+fn print0_ends_each_row_with_nul_and_a_document_is_one_row() {
+    let lines = table("one\ntwo words\n");
+    assert_eq!(
+        render(&lines.all(), &Shape::Input, &lines.source(), true),
+        "one\0two words\0"
+    );
+    let csv = csv();
+    assert_eq!(
+        render(&csv.all(), &Shape::Input, &csv.source(), true),
+        "name,note\0ann,\"a, b\"\0bob,plain\0"
+    );
+    let json = table("[{\"a\":1},{\"a\":2}]");
+    assert_eq!(
+        render(&json.all(), &Shape::Input, &json.source(), true),
+        "[\n  {\"a\":1},\n  {\"a\":2}\n]\0"
+    );
 }
 
 #[test]
@@ -216,7 +238,7 @@ fn a_template_reads_braces_as_javascript_did() {
     let pods = pods();
     let shape = Shape::Template("{{NAME}} {NA{ME} {} {".to_string());
     assert_eq!(
-        render(&pods.all()[..1], &shape, &pods.source()),
+        render(&pods.all()[..1], &shape, &pods.source(), false),
         "{web-1} {NA web-1    Running {\n"
     );
 }

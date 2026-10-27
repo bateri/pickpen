@@ -7,12 +7,16 @@
 pub struct Recipe {
     /// `--input` as the person gave it; the shape read from the input needs no flag.
     pub input: Option<String>,
+    /// `--delimiter` and `--read0`, as given.
+    pub delimiter: Option<String>,
+    pub read0: bool,
     pub where_: String,
     /// The column and whether the order is the other way.
     pub sort: Option<(String, bool)>,
     pub field: Option<Vec<String>>,
     pub format: Option<String>,
     pub output: Option<String>,
+    pub print0: bool,
 }
 
 /// A word as a POSIX shell reads it back: bare when it is safe, in single quotes otherwise.
@@ -30,6 +34,13 @@ pub fn command_line(recipe: &Recipe) -> String {
     if let Some(input) = given(&recipe.input) {
         words.push("--input".to_string());
         words.push(input);
+    }
+    if let Some(delimiter) = given(&recipe.delimiter) {
+        words.push("--delimiter".to_string());
+        words.push(shell_quote(&delimiter));
+    }
+    if recipe.read0 {
+        words.push("--read0".to_string());
     }
     words.push("--where".to_string());
     words.push(shell_quote(crate::values::js_trim(&recipe.where_)));
@@ -49,6 +60,9 @@ pub fn command_line(recipe: &Recipe) -> String {
     } else if let Some(output) = given(&recipe.output) {
         words.push("--output".to_string());
         words.push(output);
+    }
+    if recipe.print0 {
+        words.push("--print0".to_string());
     }
     words.join(" ")
 }
@@ -81,6 +95,17 @@ mod tests {
                 ..Recipe::default()
             }),
             "pickpen --input lines --where '' --output json"
+        );
+        assert_eq!(
+            command_line(&Recipe {
+                delimiter: Some(":".to_string()),
+                read0: true,
+                where_: "2>10".to_string(),
+                field: Some(vec!["1".to_string()]),
+                print0: true,
+                ..Recipe::default()
+            }),
+            "pickpen --delimiter : --read0 --where '2>10' --field 1 --print0"
         );
     }
 }

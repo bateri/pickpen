@@ -44,7 +44,7 @@ impl Out {
 /// Reads text as pickpen reads stdin, in pieces of `piece` characters.
 fn read_in(text: &str, format: Option<Format>, piece: usize) -> Out {
     let mut out = Out::default();
-    let mut reader = Reader::new(format);
+    let mut reader = Reader::new(Cut::shape(format));
     let chars: Vec<char> = text.chars().collect();
     for part in chars.chunks(piece) {
         reader.feed(&part.iter().collect::<String>(), &mut out);
@@ -372,11 +372,52 @@ fn lines_blank_ones_skipped_colour_codes_and_cr_dropped() {
 #[test]
 fn input_decides_at_once_so_a_slow_first_line_is_not_waited_on() {
     let mut out = Out::default();
-    let mut reader = Reader::new(Some(Format::Lines));
+    let mut reader = Reader::new(Cut::shape(Some(Format::Lines)));
     reader.feed("first\n", &mut out);
     assert_eq!(reader.format(), Some(Format::Lines));
     let raws: Vec<&str> = out.records.iter().map(|r| r.raw.as_str()).collect();
     assert_eq!(raws, ["first"]);
+}
+
+#[test]
+fn a_delimiter_cuts_lines_into_columns_by_place_the_last_taking_the_rest() {
+    let mut out = Out::default();
+    let mut reader = Reader::new(Cut {
+        format: Some(Format::Split),
+        delimiter: Some(":".to_string()),
+        nul: false,
+    });
+    reader.feed(
+        "src/a.rs:12:let url = \"http://x\";\nsrc/b.rs:3:fn main() {\nREADME\n",
+        &mut out,
+    );
+    reader.end(&mut out);
+    assert_eq!(out.names, strings(&["1", "2", "3"]));
+    assert_eq!(
+        out.cells(),
+        [
+            strings(&["src/a.rs", "12", "let url = \"http://x\";"]),
+            strings(&["src/b.rs", "3", "fn main() {"]),
+            strings(&["README"]),
+        ]
+    );
+    assert_eq!(out.records[0].raw, "src/a.rs:12:let url = \"http://x\";");
+}
+
+#[test]
+fn read0_ends_rows_at_nul_and_keeps_their_line_ends() {
+    for format in [Format::Lines, Format::Split] {
+        let mut out = Out::default();
+        let mut reader = Reader::new(Cut {
+            format: Some(format),
+            delimiter: Some("/".to_string()),
+            nul: true,
+        });
+        reader.feed("a/one\0b/two\nlines\0", &mut out);
+        reader.end(&mut out);
+        let raws: Vec<&str> = out.records.iter().map(|r| r.raw.as_str()).collect();
+        assert_eq!(raws, ["a/one", "b/two\nlines"]);
+    }
 }
 
 // Beyond the TypeScript's tests: what this port must keep of how Node read and wrote.
@@ -442,7 +483,7 @@ fn bytes_that_are_not_utf8_are_read_as_node_reads_them() {
 fn read_streams_what_comes_and_finishes() {
     let input = std::io::Cursor::new(b"name,age\nann,3\nbob,4\n".to_vec());
     let mut out = Out::default();
-    read(input, None, &mut out).unwrap();
+    read(input, Cut::default(), &mut out).unwrap();
     assert_eq!(out.format, Some(Format::Csv));
     assert_eq!(
         out.cells(),
@@ -464,7 +505,7 @@ fn a_slow_input_is_decided_on_the_lines_it_has_sent() {
         }
         fn problem(&mut self, _: String) {}
     }
-    let reading = std::thread::spawn(move || read(receive, None, &mut Tell(said)));
+    let reading = std::thread::spawn(move || read(receive, Cut::default(), &mut Tell(said)));
     use std::io::Write;
     send.write_all(b"ok one\n").unwrap();
     let first = heard.recv_timeout(Duration::from_secs(5)).unwrap();
