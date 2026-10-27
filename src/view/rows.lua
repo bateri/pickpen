@@ -17,7 +17,10 @@ local R = {}
 
 -- The most of a cell drawn; a longer one is cut where it would not be seen anyway.
 local DRAWN = 400
-local OVERSCAN = 8
+-- Rows made beyond those in sight, above and below: enough for a turn of the wheel to find them made.
+local OVERSCAN = 3
+-- Points of columns made beyond the edges of the list, so that a column coming into sight is there.
+local OVERSCAN_X = 60
 
 local QUANTITIES = { number = true, size = true, duration = true }
 
@@ -72,9 +75,9 @@ local function words_of()
 	return words
 end
 
-local function cell_of(text, words, quantity, ink)
+local function cell_of(text, width, words, quantity, ink)
 	local shown = L.cut(text, DRAWN)
-	local box = b.div():row():items_center():px(SIZE.pad):min_w(0):clip():h_full()
+	local box = b.div():row():items_center():w(width):no_shrink():px(SIZE.pad):clip():h_full()
 	if quantity then
 		box:justify_end()
 	end
@@ -152,11 +155,12 @@ local function row_of(index, layout)
 	if row == nil then
 		return el
 	end
-	for _, place in ipairs(layout.columns) do
+	if layout.skipped > 0 then
+		el:child(b.div():w(layout.skipped):no_shrink())
+	end
+	for _, place in ipairs(layout.visible) do
 		local cell = row.cells[place.column] or ""
-		el:child(
-			b.div():w(place.w):h_full():no_shrink():child(cell_of(cell, layout.words, R.is_quantity(place.column), nil))
-		)
+		el:child(cell_of(cell, place.w, layout.words, R.is_quantity(place.column), nil))
 	end
 	return el
 end
@@ -179,7 +183,10 @@ local function head_of(layout)
 			:tip(all and "Unmark the rows shown" or "Mark every row shown", L.label("Mod-a"))
 			:child(tick(all, some, L.ui.hover == "hb"))
 	)
-	for _, place in ipairs(layout.columns) do
+	if layout.skipped > 0 then
+		head:child(b.div():w(layout.skipped):no_shrink())
+	end
+	for _, place in ipairs(layout.visible) do
 		local column = place.column
 		local id = "h:" .. column
 		local sorted = S.order and S.order.column == column
@@ -269,10 +276,20 @@ end
 function R.view_of()
 	local sum = S.sum
 	local columns, total = R.columns()
-	local layout = { columns = columns, total = total, words = words_of() }
-	R.last_layout = layout
 	local oy = L.ui:scroll_offset("rows")
 	local ox = L.ui:scroll_offset_x("rows")
+	-- Only the columns in sight are made (a row of a wide table is a few of its cells, not all), the
+	-- room of those to their left kept by one empty box; those to the right need none.
+	local visible, skipped = {}, 0
+	for _, place in ipairs(columns) do
+		if place.x + place.w < ox - OVERSCAN_X then
+			skipped = place.x + place.w - SIZE.mark
+		elseif place.x <= ox + R.view.w + OVERSCAN_X then
+			visible[#visible + 1] = place
+		end
+	end
+	local layout = { columns = columns, visible = visible, skipped = skipped, total = total, words = words_of() }
+	R.last_layout = layout
 	local shown = sum.shown
 	local view_h = math.max(R.view.h, SIZE.row)
 	local first = math.max(1, math.floor(oy / SIZE.row) + 1 - OVERSCAN)

@@ -425,3 +425,24 @@ t.test("what goes out follows the cursor once it rests, without waiting for anot
 	t.ok(#calls > before, "asked what goes out again")
 	t.eq(calls[#calls].params.cursor, 1)
 end)
+
+t.test("of a wide table only the columns in sight are made, and scrolling across brings the others", function()
+	local names = { "ALPHA", "BRAVO", "CHARLIE", "DELTA", "ECHO", "FOXTROT", "GOLF", "HOTEL", "INDIA", "JULIET" }
+	local kinds, row = {}, {}
+	for i in ipairs(names) do
+		kinds[i] = "text"
+		row[i] = string.rep("x", 40)
+	end
+	local k = opened({ row, row }, { columns = names, kinds = kinds })
+	k.extents.rows = { content = 100, view = 300, content_w = 1000, view_w = 300 }
+	k:render(W, H, 101)
+	k:render(W, H, 101.1)
+	local words = texts(k)
+	t.has(words, "ALPHA")
+	t.lacks(words, "JULIET", "a column far to the right is not made")
+	k.hit_id = "rows"
+	act(k, { type = "scroll", x = 10, y = 10, dx = 700, dy = 0 })
+	words = texts(k)
+	t.has(words, "JULIET", "scrolled across, it is")
+	t.lacks(words, "ALPHA", "and the first, now far to the left, is not")
+end)
