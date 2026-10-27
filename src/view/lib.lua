@@ -99,7 +99,7 @@ function L.icon(name, size, role)
 	return b.image("assets/icons/" .. name .. ".svg"):size(size, size):tint(role or "dim"):no_shrink()
 end
 
--- pickpen's mark: three rows, the first and the last of them chosen.
+-- pickpen's mark: three rows, the one in the middle picked.
 function L.mark(size)
 	size = size or 14
 	return b.image("assets/mark.svg"):size(size, size):tint("accent"):no_shrink()

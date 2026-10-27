@@ -1,28 +1,31 @@
 // Draws pickpen's icon, its mark (src/assets/mark.svg, which the view shows: three rows, the
-// first and the last of them chosen), as PNGs, and writes them to src/assets/icon-<side>-<theme>.png.
+// one in the middle picked), as PNGs, and writes them to src/assets/icon-<side>-<theme>.png.
 // A terminal draws a program's icon only from the bytes it is given, so the program carries them
 // (src/program/icons.rs); run this again after changing the shapes here and there.
 //
 //   node tools/icon.mjs
 //
-// It uses nothing but Node: the shapes are rounded rectangles, filled with coverage taken
-// from a grid of samples in each pixel, and the PNG is written by hand around zlib.
+// It uses nothing but Node: the shapes are the SVG's strokes, lines with round ends and a rounded
+// rectangle's outline, filled with coverage taken from a grid of samples in each pixel, and the PNG
+// is written by hand around zlib.
 
 import { writeFileSync } from "node:fs";
 import { deflateSync, crc32 } from "node:zlib";
 
-/** The mark in its 24-unit box: x, y, width, height, corner radius, opacity. */
+/** The width of every stroke, as the SVG's. */
+const STROKE = 2;
+
+/** The mark in its 24-unit box: a line from x, y to x, y; a rectangle's outline at x, y, width,
+ * height, corner radius. */
 const MARK = [
-  [3, 3.5, 4.5, 4.5, 1.2, 1],
-  [9, 4.5, 12, 2.5, 1.25, 1],
-  [3, 9.75, 4.5, 4.5, 1.2, 0.3],
-  [9, 10.75, 9, 2.5, 1.25, 0.4],
-  [3, 16, 4.5, 4.5, 1.2, 1],
-  [9, 17, 10.5, 2.5, 1.25, 1],
+  { line: [7, 3.5, 17, 3.5] },
+  { outline: [2, 8, 20, 8, 2.5] },
+  { line: [7, 12, 17, 12] },
+  { line: [7, 20.5, 17, 20.5] },
 ];
 
-/** The part of that box an icon shows: the mark (x 3–21, y 3.5–20.5) with a unit around it. */
-const FRAME = { x: 2, y: 2, side: 20 };
+/** The part of that box an icon shows: all of it, the mark (x 1–23, y 2.5–21.5) and its margin. */
+const FRAME = { x: 0, y: 0, side: 24 };
 
 /** One colour for each ground, after MCP's `theme`: the ground the icon is made to stand on. */
 const COLOURS = {
@@ -35,10 +38,19 @@ const SIDES = [32, 64];
 
 const SAMPLES = 8;
 
-function inside(px, py, [x, y, w, h, r]) {
-  const dx = Math.max(Math.abs(px - (x + w / 2)) - (w / 2 - r), 0);
-  const dy = Math.max(Math.abs(py - (y + h / 2)) - (h / 2 - r), 0);
-  return dx * dx + dy * dy <= r * r;
+/** Whether a point is under the stroke of a shape. */
+function inside(px, py, { line, outline }) {
+  if (line) {
+    const [x1, y1, x2, y2] = line;
+    const along = Math.min(Math.max(((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / ((x2 - x1) ** 2 + (y2 - y1) ** 2), 0), 1);
+    return Math.hypot(px - (x1 + along * (x2 - x1)), py - (y1 + along * (y2 - y1))) <= STROKE / 2;
+  }
+  // How far the point is from the rounded rectangle's edge, less inside it.
+  const [x, y, w, h, r] = outline;
+  const qx = Math.abs(px - (x + w / 2)) - (w / 2 - r);
+  const qy = Math.abs(py - (y + h / 2)) - (h / 2 - r);
+  const distance = Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
+  return Math.abs(distance) <= STROKE / 2;
 }
 
 function draw(side, [red, green, blue]) {
@@ -47,21 +59,16 @@ function draw(side, [red, green, blue]) {
   for (let row = 0; row < side; row++) {
     const line = Buffer.alloc(1 + side * 4); // a leading 0: no filter
     for (let column = 0; column < side; column++) {
-      // The shapes are drawn one over another, each with its opacity.
-      let alpha = 0;
-      for (const shape of MARK) {
-        let hits = 0;
-        for (let sy = 0; sy < SAMPLES; sy++) {
-          for (let sx = 0; sx < SAMPLES; sx++) {
-            const px = FRAME.x + (column + (sx + 0.5) / SAMPLES) * scale;
-            const py = FRAME.y + (row + (sy + 0.5) / SAMPLES) * scale;
-            if (inside(px, py, shape)) hits++;
-          }
+      // A sample is covered when any stroke is under it, as one path's strokes are drawn.
+      let hits = 0;
+      for (let sy = 0; sy < SAMPLES; sy++) {
+        for (let sx = 0; sx < SAMPLES; sx++) {
+          const px = FRAME.x + (column + (sx + 0.5) / SAMPLES) * scale;
+          const py = FRAME.y + (row + (sy + 0.5) / SAMPLES) * scale;
+          if (MARK.some((shape) => inside(px, py, shape))) hits++;
         }
-        const cover = (hits / (SAMPLES * SAMPLES)) * shape[5];
-        alpha = cover + alpha * (1 - cover);
       }
-      line.set([red, green, blue, Math.round(alpha * 255)], 1 + column * 4);
+      line.set([red, green, blue, Math.round((hits / (SAMPLES * SAMPLES)) * 255)], 1 + column * 4);
     }
     rows.push(line);
   }
