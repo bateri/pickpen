@@ -571,7 +571,7 @@ end
 -- Sends the rows chosen: the program writes them once the view has closed. `key` is the `--expect`
 -- key that sent them, which the program writes ahead of them (none for Enter).
 function A.send(id, key)
-	if S.sending then
+	if S.sending or A.still_executing() then
 		return
 	end
 	local params = { key = key }
@@ -595,9 +595,54 @@ function A.send(id, key)
 	end)
 end
 
+-- The rows read again from `--reload`'s command: the program lets the ones there were go.
+function A.reload()
+	ask("reload", {}, function(sum)
+		sum.query = nil
+		A.take(sum, true)
+	end)
+end
+
+-- `--execute` for the cursor's row (`{+}` in it the marked rows): the view stays and says how it
+-- ended, and with `--reload` the rows are read again after it.
+function A.execute()
+	local id = A.cursor_id()
+	if id == nil or S.executing then
+		return
+	end
+	S.executing = true
+	A.toast("Running " .. L.cut(S.boot.execute, 60))
+	ask("execute", { id = id }, function(result)
+		S.executing = false
+		local status = result.status ~= json.null and result.status or nil
+		local words = status == 0 and "Ran"
+			or status == nil and "Ended by a signal"
+			or ("Ended with status " .. tostring(status))
+		if type(result.said) == "string" then
+			words = words .. ": " .. result.said
+		end
+		A.toast(words, status == 0 and "info" or "bad")
+		if S.boot.reload then
+			A.reload()
+		end
+	end, function(err)
+		S.executing = false
+		A.toast(err.message or "The command did not run", "bad")
+	end)
+end
+
+-- Whether `--execute` is still running, which the view waits for before it ends (⌃C does not):
+-- what the person set going is let finish, and they see how it ended.
+function A.still_executing()
+	if S.executing then
+		A.toast("Waiting for the command to end: " .. L.cut(S.boot.execute, 60))
+	end
+	return S.executing == true
+end
+
 -- Sends nothing, and ends.
 function A.cancel()
-	if S.sending then
+	if S.sending or A.still_executing() then
 		return
 	end
 	S.sending = true

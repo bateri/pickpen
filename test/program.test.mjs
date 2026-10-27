@@ -328,14 +328,14 @@ test("a preview's {q} is the query, and {+} the marked rows", () => {
 
 test("--expect: the key that sent goes ahead of the rows, an empty line for Enter and --where", async () => {
   const input = "ok one\nerror two\nerror three\n";
-  const headless = await run(["--where", "error", "--expect", "ctrl-o,F5"], input);
+  const headless = await run(["--where", "error", "--expect", "ctrl-g,F5"], input);
   assert.equal(headless.status, 0, headless.err);
   assert.equal(headless.out, "\nerror two\nerror three\n");
   for (const [key, first] of [
     [undefined, ""],
-    ["ctrl-o", "ctrl-o"],
+    ["ctrl-g", "ctrl-g"],
   ]) {
-    const shown = pane(`printf ${q(input)} | pickpen --expect ctrl-o,F5`, [
+    const shown = pane(`printf ${q(input)} | pickpen --expect ctrl-g,F5`, [
       ["boot", {}],
       ["query", { query: "error" }],
       ["mark_shown", { on: true }],
@@ -345,6 +345,53 @@ test("--expect: the key that sent goes ahead of the rows, an empty line for Ente
     assert.equal(shown.out, `${first}\nerror two\nerror three\n`);
   }
   assert.equal((await run(["--where", "x", "--expect", "alt-x"], input)).status, 64);
+  assert.equal((await run(["--where", "x", "--expect", "ctrl-o"], input)).status, 64);
+});
+
+test("--reload: the rows are what the command prints, and are read again when asked", async () => {
+  const runs = join(dir, "runs");
+  const command = `echo run >> ${q(runs)}; cat ${q(runs)}; echo said >&2`;
+  const headless = await run(["--reload", command, "--where", "run"], "not read\n");
+  assert.equal(headless.status, 0, headless.err);
+  assert.equal(headless.out, "run\n");
+  assert.match(headless.err, /said/);
+  const { log, err } = pane(`pickpen --reload ${q(command)}`, [
+    ["boot", {}],
+    ["reload", {}],
+    ["output", {}],
+    ["cancel", {}],
+  ]);
+  const said = results(log);
+  assert.equal(said[0].summary.total, 2);
+  assert.equal(said[1].total, 3);
+  assert.match(said.at(-2).again.line, /^pickpen --reload '.*' --where ''$/);
+  // What the command says on stderr is not printed over the view.
+  assert.doesNotMatch(err, /said/);
+  assert.equal((await run(["--reload", "true", `${DEMO}pods.txt`])).status, 64);
+});
+
+test("a --reload command that fails is said, with the last of what it said", () => {
+  const { log } = pane(`pickpen --reload 'echo row; echo broken >&2; exit 3'`, [
+    ["boot", {}],
+    ["cancel", {}],
+  ]);
+  assert.equal(results(log)[0].summary.problem, "--reload ended with status 3: broken");
+});
+
+test("--execute runs for the cursor's row, or the marked rows, and the view stays", () => {
+  const ran = join(dir, "ran");
+  const { log, status } = pane(`printf 'one\\ntwo\\n' | pickpen --execute 'echo {+} > ${ran}; echo done'`, [
+    ["boot", {}],
+    ["execute", { id: 1 }],
+    ["mark", { ids: [0, 1], on: true }],
+    ["execute", { id: 1 }],
+    ["cancel", {}],
+  ]);
+  assert.equal(status, 1);
+  const said = results(log);
+  assert.equal(said[1].status, 0);
+  assert.equal(said[1].said, "done");
+  assert.equal(readFileSync(ran, "utf8"), "one two\n");
 });
 
 test("Send nothing writes nothing and ends with 1", () => {

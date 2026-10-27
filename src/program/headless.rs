@@ -234,7 +234,11 @@ pub fn run(run: &Run, stream: Box<dyn Read + Send>) -> ExitCode {
         return code;
     }
     if let Err(why) = read {
-        let from = run.file.as_deref().unwrap_or("stdin");
+        let from = match (&run.file, &run.reload) {
+            (Some(file), _) => file.as_str(),
+            (None, Some(_)) => "what --reload printed",
+            (None, None) => "stdin",
+        };
         return quit(
             66,
             &format!("cannot read {from}: {}", crate::args::os_words(&why)),

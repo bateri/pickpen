@@ -27,7 +27,7 @@ function C.visible_columns()
 	return out
 end
 
-C.GROUPS = { "Move", "Mark", "Send", "Order", "Panels", "Copy" }
+C.GROUPS = { "Move", "Mark", "Send", "Run", "Order", "Panels", "Copy" }
 
 C.COMMANDS = {
 	{
@@ -190,6 +190,32 @@ C.COMMANDS = {
 		title = "Send nothing and end",
 		group = "Send",
 		run = A.cancel,
+	},
+
+	{
+		id = "reload",
+		also = "refresh again rerun update",
+		title = "Read the rows again (--reload)",
+		group = "Run",
+		keys = { "Ctrl-r" },
+		when = function()
+			return S.boot ~= nil and S.boot.reload ~= nil
+		end,
+		run = function()
+			A.toast("Reading the rows again")
+			A.reload()
+		end,
+	},
+	{
+		id = "execute",
+		also = "run command shell",
+		title = "Run the command on the row, or the marked rows (--execute)",
+		group = "Run",
+		keys = { "Ctrl-x" },
+		when = function()
+			return S.boot ~= nil and S.boot.execute ~= nil and S.cursor ~= nil
+		end,
+		run = A.execute,
 	},
 
 	{

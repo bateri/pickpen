@@ -11,6 +11,7 @@
 //! - `mark`, `mark_range`, `mark_shown`, `unmark_all`, `invert`, `mark_value`: the marks
 //! - `column`: a column's values and chart; `output`: what Send would write, and the command line
 //!   that does it again; `preview`: what `--preview` prints for a row; `copy_row`
+//! - `reload`: the rows read again from `--reload`'s command; `execute`: `--execute` run for a row
 //! - `choose`: the rows to send (and the `--expect` key they were sent with), after which the view
 //!   closes and the program writes them.
 
@@ -26,6 +27,7 @@ use crate::output::{self, Shape};
 use crate::picker::{Order, Picker};
 use crate::preview;
 use crate::query;
+use crate::source;
 
 /// How long `boot` waits for the input, so that the view opens on its rows rather than on nothing (a
 /// short input whole, the first of a long one).
@@ -54,6 +56,8 @@ pub struct Shared {
     pub answer: Mutex<Option<Answer>>,
     /// The person sent nothing.
     pub cancelled: Mutex<bool>,
+    /// The process group of the command `--reload` last ran, while it runs.
+    pub reading: Mutex<Option<u32>>,
 }
 
 impl Shared {
@@ -63,6 +67,7 @@ impl Shared {
             changed: Condvar::new(),
             answer: Mutex::new(None),
             cancelled: Mutex::new(false),
+            reading: Mutex::new(None),
         })
     }
 
@@ -138,6 +143,7 @@ fn again(picker: &Picker, run: &Run, fields: Option<&[String]>) -> Value {
     let line_for = |where_: &str| {
         command_line(&Recipe {
             input: run.given.input.clone(),
+            reload: run.reload.clone(),
             delimiter: run.given.delimiter.clone(),
             read0: run.given.read0,
             where_: where_.to_owned(),
@@ -184,6 +190,45 @@ fn shown_now(picker: &Picker) -> Value {
     sum
 }
 
+/// The picker once the rows have come, or a moment has passed: so that the view opens on its rows
+/// rather than on nothing (a short input whole, the first of a long one).
+fn first_rows(shared: &Shared) -> MutexGuard<'_, Picker> {
+    let deadline = Instant::now() + FIRST_ROWS;
+    let mut picker = shared.lock();
+    while !picker.done && !picker.capped && Instant::now() < deadline {
+        let left = deadline.saturating_duration_since(Instant::now());
+        picker = shared
+            .changed
+            .wait_timeout(picker, left)
+            .map_or_else(|e| e.into_inner().0, |r| r.0);
+    }
+    picker
+}
+
+/// A command of `--preview` or `--execute` with its braces filled (`preview::command_for`) for the
+/// row `params` names; the marked rows are found only when it asks for them, as there may be many.
+fn command_of(template: &str, params: &Value, picker: &mut Picker) -> Result<String, ViewError> {
+    let ids = if template.contains("{+") {
+        picker.marked_ids()
+    } else {
+        Vec::new()
+    };
+    let record = params["id"]
+        .as_u64()
+        .and_then(|id| picker.records.get(id as usize))
+        .ok_or_else(|| bad("There is no such row"))?;
+    let marked: Vec<_> = ids.iter().map(|&id| &picker.records[id as usize]).collect();
+    Ok(preview::command_for(
+        template,
+        &preview::Fill {
+            record,
+            query: &picker.query_text,
+            marked: &marked,
+            source: picker.source(),
+        },
+    ))
+}
+
 /// After the answer has gone back to the view: the program closes its view, and goes on to write.
 /// The view closes itself too once it has its answer, for a terminal that cannot close it for the
 /// program; whichever comes first does, and the other finds nothing to close.
@@ -209,16 +254,7 @@ pub fn serve(
     let s = shared.clone();
     let r = run.clone();
     let options = options.call("boot", move |_params, _call: &Call| {
-        // A moment for the rows.
-        let deadline = Instant::now() + FIRST_ROWS;
-        let mut picker = s.lock();
-        while !picker.done && !picker.capped && Instant::now() < deadline {
-            let left = deadline.saturating_duration_since(Instant::now());
-            picker = s
-                .changed
-                .wait_timeout(picker, left)
-                .map_or_else(|e| e.into_inner().0, |r| r.0);
-        }
+        let mut picker = first_rows(&s);
         let mut boot = json!({
             "version": version,
             "title": r.title,
@@ -227,6 +263,8 @@ pub fn serve(
             "where": r.where_,
             "confirm": r.confirm,
             "preview": r.preview,
+            "reload": r.reload,
+            "execute": r.execute,
             "expect": r.expect.iter().map(|name| json!({
                 "name": name,
                 "keys": crate::args::expect_keys(name),
@@ -508,37 +546,45 @@ pub fn serve(
         Some(template) => {
             let s = shared.clone();
             options.call("preview", move |params, call: &Call| {
-                let command = {
-                    let mut picker = s.lock();
-                    // The marked rows only when the command asks for them: there may be many.
-                    let ids = if template.contains("{+") {
-                        picker.marked_ids()
-                    } else {
-                        Vec::new()
-                    };
-                    let record = params["id"]
-                        .as_u64()
-                        .and_then(|id| picker.records.get(id as usize))
-                        .ok_or_else(|| bad("There is no such row"))?;
-                    let marked: Vec<_> =
-                        ids.iter().map(|&id| &picker.records[id as usize]).collect();
-                    preview::command_for(
-                        &template,
-                        &preview::Fill {
-                            record,
-                            query: &picker.query_text,
-                            marked: &marked,
-                            source: picker.source(),
-                        },
-                    )
-                };
+                let command = command_of(&template, &params, &mut s.lock())?;
                 let width = params["width"].as_u64().unwrap_or(80).clamp(10, 1000) as u32;
-                let result = preview::run(&command, width, &|| call.is_cancelled());
+                let result = preview::run(&command, width, Some(preview::TIMEOUT), &|| {
+                    call.is_cancelled()
+                });
                 Ok(json!({
                     "text": result.text,
                     "status": result.status,
                     "cut": result.cut,
                     "timed_out": result.timed_out,
+                }))
+            })
+        }
+    };
+
+    let options = match run.reload.clone() {
+        None => options,
+        Some(command) => {
+            let s = shared.clone();
+            let r = run.clone();
+            options.call("reload", move |_params, _call: &Call| {
+                source::reload(&s, &command, &r.cut);
+                Ok(shown_now(&first_rows(&s)))
+            })
+        }
+    };
+
+    let options = match run.execute.clone() {
+        None => options,
+        Some(template) => {
+            let s = shared.clone();
+            options.call("execute", move |params, call: &Call| {
+                let command = command_of(&template, &params, &mut s.lock())?;
+                // As long as it takes: what it does is the person's to have done.
+                let result = preview::run(&command, 80, None, &|| call.is_cancelled());
+                let last = result.text.lines().rev().find(|l| !l.trim().is_empty());
+                Ok(json!({
+                    "status": result.status,
+                    "said": last.map(|l| crate::picker::cut(l.trim(), 300)),
                 }))
             })
         }

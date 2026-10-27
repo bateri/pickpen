@@ -168,6 +168,14 @@ function Program:answer(method, params)
 	elseif method == "choose" then
 		self.chosen = params
 		return { sent = 1 }
+	elseif method == "execute" then
+		return { status = 0, said = "deleted " .. self.rows[params.id + 1][1] }
+	elseif method == "reload" then
+		self.reloads = (self.reloads or 0) + 1
+		self:refilter()
+		local sum = self:summary()
+		sum.query = self.query
+		return sum
 	elseif method == "fuzzy" then
 		self.fuzzy = params.on
 		local sum = self:summary()
@@ -315,18 +323,40 @@ t.test("the arrows move the cursor, and Enter sends the row it is on", function(
 end)
 
 t.test("a key --expect gives sends too, saying which it was; Enter says none", function()
-	local k = opened(nil, { boot = { expect = { { name = "ctrl-o", keys = "Ctrl-o" } } } })
+	local k = opened(nil, { boot = { expect = { { name = "ctrl-g", keys = "Ctrl-g" } } } })
 	key(k, "down")
-	key(k, "o", { control = true })
+	key(k, "g", { control = true })
 	local choose = k:last_call("choose")
-	t.eq(choose.params.key, "ctrl-o")
+	t.eq(choose.params.key, "ctrl-g")
 	t.eq(choose.params.ids, { 1 })
-	k = opened(nil, { boot = { expect = { { name = "ctrl-o", keys = "Ctrl-o" } } } })
+	k = opened(nil, { boot = { expect = { { name = "ctrl-g", keys = "Ctrl-g" } } } })
 	key(k, "f1")
-	t.has(texts(k), "Send, saying ctrl-o")
+	t.has(texts(k), "Send, saying ctrl-g")
 	key(k, "escape")
 	key(k, "enter")
 	t.eq(k:last_call("choose").params.key, nil)
+end)
+
+t.test("⌃X runs --execute for the cursor's row and says how it ended; ⌃R reads the rows again", function()
+	local k, program = opened(nil, { boot = { execute = "kubectl delete pod {NAME}", reload = "kubectl get pods" } })
+	key(k, "down")
+	key(k, "x", { control = true })
+	t.eq(k:last_call("execute").params.id, 1)
+	t.has(texts(k), "Ran: deleted api-2")
+	t.eq(program.reloads, 1, "the rows are read again after it")
+	key(k, "r", { control = true })
+	t.eq(program.reloads, 2)
+	-- While the command runs, the view waits for it before it sends or ends.
+	k:event({ type = "key", key = "x", mods = { control = true } })
+	k:event({ type = "key", key = "enter", mods = {} })
+	t.eq(k:last_call("choose"), nil)
+	program:serve(k)
+	-- Without the options, the keys do nothing.
+	k = opened()
+	key(k, "x", { control = true })
+	key(k, "r", { control = true })
+	t.eq(k:last_call("execute"), nil)
+	t.eq(k:last_call("reload"), nil)
 end)
 
 t.test("Tab marks the row and steps on; Send then sends the marked rows", function()

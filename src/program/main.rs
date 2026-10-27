@@ -18,6 +18,7 @@ mod picker;
 mod preview;
 mod query;
 mod served;
+mod source;
 mod values;
 
 use std::fs::File;
@@ -28,7 +29,7 @@ use std::sync::Arc;
 use pencere::{EndedBy, Options, Outcome, Terminal, ViewControl};
 
 use crate::args::{Parsed, Run};
-use crate::input::{Format, Record, Sink};
+use crate::input::Record;
 use crate::picker::Picker;
 use crate::served::Shared;
 
@@ -69,67 +70,26 @@ fn input_of(run: &Run) -> Result<Box<dyn Read + Send>, ExitCode> {
     }
 }
 
-/// The input as it is read, into the picker the view is served from.
-struct Feed {
-    shared: Arc<Shared>,
-}
-
-impl Sink for Feed {
-    fn format(&mut self, format: Format) {
-        self.shared.lock().format = Some(format);
-    }
-
-    fn columns(&mut self, names: Vec<String>, heading: Option<String>) {
-        self.shared.lock().columns(names, heading);
-        self.shared.ring();
-    }
-
-    fn record(&mut self, record: Record) {
-        self.shared.lock().record(record);
-        self.shared.ring();
-    }
-
-    fn problem(&mut self, text: String) {
-        self.shared.lock().problem(text);
-        self.shared.ring();
-    }
-
-    fn finish(&mut self) {
-        self.shared.lock().finish();
-        self.shared.ring();
-    }
-
-    fn stop(&self) -> bool {
-        self.shared.lock().capped
-    }
-}
-
-/// A person chooses in the pane.
-fn choose(run: Run, stream: Box<dyn Read + Send>) -> ExitCode {
+/// A person chooses in the pane: the rows come from `stream`, or with `--reload` from its command.
+fn choose(run: Run, stream: Option<Box<dyn Read + Send>>) -> ExitCode {
     let rule = if run.confirm {
         run.where_.as_deref()
     } else {
         None
     };
     let shared = Shared::new(Picker::new(&run.query, rule, run.fuzzy));
-    let feed = shared.clone();
-    let cut = run.cut.clone();
-    std::thread::spawn(move || {
-        let mut sink = Feed {
-            shared: feed.clone(),
-        };
-        if let Err(why) = input::read(stream, cut, &mut sink) {
-            sink.problem(format!(
-                "The input could not be read: {}",
-                args::os_words(&why)
-            ));
-            sink.finish();
-        }
-    });
+    match (stream, &run.reload) {
+        (Some(stream), _) => source::read_into(&shared, run.cut.clone(), stream, 0),
+        (None, Some(command)) => source::reload(&shared, command, &run.cut),
+        (None, None) => {}
+    }
 
     let terminal = match Terminal::controlling() {
         Ok(terminal) => terminal,
-        Err(_) => return no_view(),
+        Err(_) => {
+            source::stop(&shared);
+            return no_view();
+        }
     };
     let run = Arc::new(run);
     let control = ViewControl::new();
@@ -151,6 +111,8 @@ fn choose(run: Run, stream: Box<dyn Read + Send>) -> ExitCode {
         VERSION,
     );
     let outcome = pencere::serve(options);
+    // What --reload last ran goes with the view.
+    source::stop(&shared);
     let answer = shared
         .answer
         .lock()
@@ -216,13 +178,35 @@ fn main() -> ExitCode {
             );
         }
     };
+    let headless = run.where_.is_some() && !run.confirm;
+    if let Some(command) = run.reload.clone() {
+        if !headless {
+            return choose(run, None);
+        }
+        // With nobody to ask, the command's rows once, its stderr pickpen's own.
+        return match source::spawn(&command, false) {
+            Ok(mut child) => {
+                let code = match child.stdout.take() {
+                    Some(stdout) => headless::run(&run, Box::new(stdout)),
+                    None => ExitCode::from(1),
+                };
+                let _ = child.kill();
+                let _ = child.wait();
+                code
+            }
+            Err(why) => quit(
+                66,
+                &format!("cannot run --reload: {}", args::os_words(&why)),
+            ),
+        };
+    }
     let stream = match input_of(&run) {
         Ok(stream) => stream,
         Err(code) => return code,
     };
-    if run.where_.is_some() && !run.confirm {
+    if headless {
         headless::run(&run, stream)
     } else {
-        choose(run, stream)
+        choose(run, Some(stream))
     }
 }

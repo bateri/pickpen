@@ -20,7 +20,7 @@ use crate::output::{Source, part_of};
 
 /// What the view is shown of a preview at most: more is cut, and the view says so.
 const MAX_OUTPUT: usize = 256 * 1024;
-const TIMEOUT: Duration = Duration::from_secs(10);
+pub const TIMEOUT: Duration = Duration::from_secs(10);
 
 /// What a preview printed, and how it ended.
 pub struct Preview {
@@ -92,10 +92,16 @@ pub fn command_for(template: &str, fill: &Fill<'_>) -> String {
     out
 }
 
-/// Runs `command` with `sh -c`, `width` columns wide, until it ends, `TIMEOUT` passes or
-/// `cancelled` says the view has moved on: then its whole process group is killed.
-pub fn run(command: &str, width: u32, cancelled: &dyn Fn() -> bool) -> Preview {
-    let mut child = match unsafe_session(
+/// Runs `command` with `sh -c`, `width` columns wide, until it ends, `timeout` passes (a preview's is
+/// `TIMEOUT`; `--execute` has none) or `cancelled` says the view has moved on: then its whole
+/// process group is killed.
+pub fn run(
+    command: &str,
+    width: u32,
+    timeout: Option<Duration>,
+    cancelled: &dyn Fn() -> bool,
+) -> Preview {
+    let mut child = match own_session(
         Command::new("/bin/sh")
             .arg("-c")
             .arg(command)
@@ -174,7 +180,7 @@ pub fn run(command: &str, width: u32, cancelled: &dyn Fn() -> bool) -> Preview {
         }
         if cancelled() {
             kill();
-        } else if started.elapsed() > TIMEOUT && !timed_out {
+        } else if timeout.is_some_and(|t| started.elapsed() > t) && !timed_out {
             timed_out = true;
             kill();
         }
@@ -193,7 +199,7 @@ pub fn run(command: &str, width: u32, cancelled: &dyn Fn() -> bool) -> Preview {
 
 /// The command in a session of its own: no controlling terminal, its own process group.
 #[allow(unsafe_code)]
-fn unsafe_session(command: &mut Command) -> &mut Command {
+pub fn own_session(command: &mut Command) -> &mut Command {
     // SAFETY: `setsid` is async-signal-safe, and nothing else runs between fork and exec.
     unsafe {
         command.pre_exec(|| {
@@ -240,7 +246,12 @@ mod tests {
 
     #[test]
     fn a_preview_says_what_the_command_printed_and_how_it_ended() {
-        let preview = run("printf 'one\\n'; echo two >&2; exit 3", 80, &|| false);
+        let preview = run(
+            "printf 'one\\n'; echo two >&2; exit 3",
+            80,
+            Some(TIMEOUT),
+            &|| false,
+        );
         assert!(preview.text.contains("one\n"));
         assert!(preview.text.contains("two\n"));
         assert_eq!(preview.status, Some(3));
@@ -249,7 +260,12 @@ mod tests {
 
     #[test]
     fn a_preview_is_given_the_width_and_no_terminal() {
-        let preview = run("echo $COLUMNS $PICKPEN_PREVIEW; tty", 61, &|| false);
+        let preview = run(
+            "echo $COLUMNS $PICKPEN_PREVIEW; tty",
+            61,
+            Some(TIMEOUT),
+            &|| false,
+        );
         assert!(preview.text.starts_with("61 1\n"), "{}", preview.text);
         assert!(preview.text.contains("not a tty"), "{}", preview.text);
     }
@@ -257,7 +273,7 @@ mod tests {
     #[test]
     fn a_preview_the_view_gave_up_is_killed() {
         let started = Instant::now();
-        let preview = run("sleep 5", 80, &|| {
+        let preview = run("sleep 5", 80, Some(TIMEOUT), &|| {
             started.elapsed() > Duration::from_millis(100)
         });
         assert!(started.elapsed() < Duration::from_secs(3));
@@ -266,7 +282,12 @@ mod tests {
 
     #[test]
     fn a_long_preview_is_cut() {
-        let preview = run("head -c 400000 /dev/zero | tr '\\0' a", 80, &|| false);
+        let preview = run(
+            "head -c 400000 /dev/zero | tr '\\0' a",
+            80,
+            Some(TIMEOUT),
+            &|| false,
+        );
         assert!(preview.cut);
         assert_eq!(preview.text.len(), MAX_OUTPUT);
     }

@@ -36,8 +36,12 @@ you choose in the terminal pane, and the rows you chose go out on stdout.
   -p, --preview COMMAND  show what COMMAND prints for the row the cursor is on;
                          {} {COLUMN} {2} stand for the row and its cells, {q} for
                          the query, {+} {+COLUMN} for the marked rows (or the row)
-      --expect KEY,…     KEY sends too (ctrl-o, f5), and the first line written is
+      --expect KEY,…     KEY sends too (ctrl-g, f5), and the first line written is
                          the key that sent, empty for Enter
+      --reload COMMAND   read the rows from what COMMAND prints, not from stdin,
+                         and again on ⌃R and after --execute
+      --execute COMMAND  run COMMAND on ⌃X, its braces filled as --preview's,
+                         with no terminal: the view stays, and says how it ended
   -t, --title TEXT       a line above the rows, saying what they are for
   -h, --help             this text
   -v, --version          the version
@@ -87,20 +91,29 @@ pub struct Run {
     pub print0: bool,
     pub cut: Cut,
     pub preview: Option<String>,
-    /// `--expect`: the keys besides Enter that send, as fzf names them (`ctrl-o`, `f5`).
+    /// `--expect`: the keys besides Enter that send, as fzf names them (`ctrl-g`, `f5`).
     pub expect: Vec<String>,
+    /// `--reload`: the command the rows are read from, rather than stdin.
+    pub reload: Option<String>,
+    /// `--execute`: the command ⌃X runs for the cursor's row, or the marked rows.
+    pub execute: Option<String>,
     pub title: Option<String>,
     pub given: Given,
 }
 
-/// A key `--expect` takes, as fzf names it, and as the view's keys are written (`Ctrl-o`, `F5`):
-/// ⌃ with a letter or a digit, or a function key. The others type, or are a terminal's own.
+/// The letters ⌃ never brings to the view with: a Mac's text fields edit with them (⌃A, ⌃E, ⌃K, ⌃O,
+/// …, from AppKit's standard key bindings), take ⌃N and ⌃P for ↓ and ↑, and ⌃C quits.
+const CTRL_KEPT: &str = "abcdefhklnoptvy";
+
+/// A key `--expect` takes, as fzf names it, and as the view's keys are written (`Ctrl-g`, `F5`):
+/// ⌃ with a digit or with a letter the query's field has no use for, or a function key. The others
+/// type, edit the query, or are a terminal's own.
 pub fn expect_keys(name: &str) -> Option<String> {
     if let Some(key) = name.strip_prefix("ctrl-")
         && key.len() == 1
-        && key
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+        && key.bytes().all(|b| {
+            (b.is_ascii_lowercase() && !CTRL_KEPT.contains(char::from(b))) || b.is_ascii_digit()
+        })
     {
         return Some(format!("Ctrl-{key}"));
     }
@@ -125,7 +138,7 @@ enum Kind {
 
 /// The options, as `parseArgs` was given them: long name, short name, kind, and whether it may
 /// be given more than once.
-const OPTIONS: [(&str, char, Kind, bool); 17] = [
+const OPTIONS: [(&str, char, Kind, bool); 19] = [
     ("query", 'q', Kind::Text, false),
     ("fuzzy", 'z', Kind::Flag, false),
     ("where", 'w', Kind::Text, false),
@@ -140,6 +153,8 @@ const OPTIONS: [(&str, char, Kind, bool); 17] = [
     ("read0", '\0', Kind::Flag, false),
     ("preview", 'p', Kind::Text, false),
     ("expect", '\0', Kind::Text, true),
+    ("reload", '\0', Kind::Text, false),
+    ("execute", '\0', Kind::Text, false),
     ("title", 't', Kind::Text, false),
     ("help", 'h', Kind::Flag, false),
     ("version", 'v', Kind::Flag, false),
@@ -466,13 +481,19 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
         let name = js_trim(name).to_lowercase();
         if expect_keys(&name).is_none() {
             return Err(format!(
-                "--expect takes ctrl-<letter>, ctrl-<digit> or f1 to f12, not {}",
+                "--expect takes ctrl- and a letter the query has no use for (not {CTRL_KEPT}), \
+                 ctrl- and a digit, or f1 to f12; not {}",
                 quote_json(&name)
             ));
         }
         if !expect.contains(&name) {
             expect.push(name);
         }
+    }
+
+    let reload = values.text("reload");
+    if reload.is_some() && positionals.first().is_some_and(|file| file != "-") {
+        return Err("give one of FILE and --reload".to_string());
     }
 
     let file = positionals.into_iter().next().filter(|file| file != "-");
@@ -492,6 +513,8 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
         },
         preview: values.text("preview"),
         expect,
+        reload,
+        execute: values.text("execute"),
         title: values.text("title"),
         given: Given {
             input: given_input,

@@ -83,15 +83,23 @@ pickpen runs on, with `{}`, `{COLUMN}` and `{2}` quoted for the shell — `{q}` 
 `{+}`, `{+COLUMN}` each marked row (or the cursor's) — in a session of its own with no terminal and
 no stdin, and shows what it prints, colours and all.
 
-**One more key that sends, and says so.** `--expect ctrl-o,f5` makes those keys send as Enter does,
+**One more key that sends, and says so.** `--expect ctrl-g,f5` makes those keys send as Enter does,
 and the first line written is the key that sent (empty for Enter, and for `--where`), so that a
 script can open what was chosen one way or another:
 
 ```sh
-out=$(git ls-files | pickpen --fuzzy --expect ctrl-o) || exit
+out=$(git ls-files | pickpen --fuzzy --expect ctrl-g) || exit
 key=$(printf '%s\n' "$out" | head -1); file=$(printf '%s\n' "$out" | sed 1d)
-if [ "$key" = ctrl-o ]; then open "$file"; else vim "$file"; fi
+if [ "$key" = ctrl-g ]; then open "$file"; else vim "$file"; fi
 ```
+
+**Read again, and act on a row.** `--reload 'kubectl get pods'` reads the rows from what the
+command prints rather than from stdin, and `⌃R` reads them again. `--execute 'kubectl delete pod
+{NAME}'` runs on `⌃X` for the cursor's row (`{+NAME}` for each marked one), its braces filled as
+the preview's; the view stays, says how it ended, and reads the rows again when there is a
+`--reload`. While the command runs the view neither sends nor ends (`⌃C` still quits). Both run as
+the preview does, with no terminal: a command that needs one, an editor, comes after pickpen, by
+what goes out or by `--expect`.
 
 |                                                                     |                                                         |
 | ------------------------------------------------------------------- | ------------------------------------------------------- |
@@ -116,6 +124,7 @@ do the mouse does too, the bottom line has the keys that matter most (each one a
 | `⌘K`                 | every command, a column's own among them                                                             |
 | `⌘I`, `F2` `F3` `F4` | the side panel: the row, a column, what goes out                                                     |
 | `⌘C`                 | copy the row                                                                                         |
+| `⌃R`, `⌃X`           | read the rows again (`--reload`), run `--execute` for the row                                        |
 | `⌃C`                 | quit, sending nothing                                                                                |
 
 The box in front of a row marks it, and a drag down the boxes marks every row it passes;
@@ -125,7 +134,9 @@ takes the keyboard from the query.
 
 The keys a terminal keeps for itself never reach a view — in bateri `⌘P`, `⌘W`, `⌘O`, `⌘T`,
 `⌘N`, `⌘D` and `⌘1`–`⌘9` — and no command is on `⌥` and a letter, which is how a Mac types
-`@`, `#`, `[` or `{` on many layouts. On Linux and Windows, `⌘` is `Ctrl`.
+`@`, `#`, `[` or `{` on many layouts. On Linux and Windows, `⌘` is `Ctrl`. On a Mac, `⌃` with A,
+B, D, E, F, H, K, L, O, T, V or Y edits the query, as it does any Mac text, and `⌃N` `⌃P` move:
+`--expect` takes none of them.
 
 ## Run it
 
@@ -181,6 +192,8 @@ guess whether it is in one (pencere §13).
 
 - `src/program/input.rs` reads the input as it comes, telling its shape from the first lines, and
   keeps each record's own text, which is what goes out when the output has the input's shape.
+  `src/program/source.rs` fills the rows from it, or with `--reload` from what a command prints,
+  read again whenever the person asks.
 - `src/program/query.rs` is the query, and the order. The program holds the rows and runs it for
   the view and for `--where` alike, so the command line the view shows chooses what the view
   showed. A test runs `--where` and a view sending the rows the query matches, in a pane, and

@@ -109,6 +109,28 @@ fn the_options_are_read_as_they_were_given() {
     assert_eq!(o.file.as_deref(), Some("-file"));
 
     assert!(options(&["-z"]).fuzzy && options(&["--fuzzy"]).fuzzy);
+    let o = options(&["--expect", "ctrl-g, F5", "--expect", "ctrl-1,ctrl-g"]);
+    assert_eq!(o.expect, ["ctrl-g", "f5", "ctrl-1"]);
+    assert_eq!(expect_keys("ctrl-g").as_deref(), Some("Ctrl-g"));
+    assert_eq!(expect_keys("f12").as_deref(), Some("F12"));
+    for kept in [
+        "ctrl-o", "ctrl-e", "ctrl-c", "alt-x", "f13", "f05", "enter", "ctrl-",
+    ] {
+        assert_eq!(expect_keys(kept), None, "{kept}");
+    }
+    assert_eq!(
+        error(&["--expect", "ctrl-o"]),
+        "--expect takes ctrl- and a letter the query has no use for (not abcdefhklnoptvy), ctrl- \
+         and a digit, or f1 to f12; not \"ctrl-o\""
+    );
+    let o = options(&["--reload", "ps aux", "--execute", "kill {PID}"]);
+    assert_eq!(o.reload.as_deref(), Some("ps aux"));
+    assert_eq!(o.execute.as_deref(), Some("kill {PID}"));
+    assert_eq!(options(&["--reload", "ps", "-"]).file, None);
+    assert_eq!(
+        error(&["--reload", "ps", "file.txt"]),
+        "give one of FILE and --reload"
+    );
     assert!(!options(&[]).fuzzy);
 
     let o = options(&["-o", "jsonl", "-cw", "x"]);

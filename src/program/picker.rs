@@ -86,6 +86,8 @@ pub struct Picker {
     rule_text: Option<String>,
     /// `--fuzzy`, or the palette's: plain words are looked for letter by letter, best first.
     pub fuzzy: bool,
+    /// Moves when the rows are read again (`--reload`): what the reading before brings is let go.
+    pub generation: u64,
     rule: Option<Query>,
     /// Moves when the rows shown are other rows or in another order.
     pub layout: u64,
@@ -195,6 +197,24 @@ impl Picker {
             }
         }
         self.bump();
+    }
+
+    /// The rows read again (`--reload`): every row goes, and its marks with it; the query, the order
+    /// and how words are read stay. The numbers the view holds its windows by move on.
+    pub fn reset(&mut self) {
+        let old = std::mem::take(self);
+        *self = Self {
+            query: query::parse_as(&old.query_text, &[], old.fuzzy),
+            query_text: old.query_text,
+            rule_text: old.rule_text,
+            fuzzy: old.fuzzy,
+            order: old.order,
+            generation: old.generation + 1,
+            layout: old.layout + 1,
+            marks: old.marks + 1,
+            version: old.version + 1,
+            ..Self::default()
+        };
     }
 
     pub fn problem(&mut self, text: String) {

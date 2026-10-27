@@ -21,6 +21,8 @@ change what the previous one did.
   shown as it was read, and taken out with a click.
 - `--expect` keys that send too, the key written ahead of the rows; `{q}` (the query) and `{+}`
   (the marked rows) in `--preview`.
+- `--reload` to read the rows from a command, again on `⌃R`, and `--execute` to run a command for
+  the row or the marked rows on `⌃X`, with no terminal, the view staying.
 - `--fuzzy` (and its command in the palette): a plain word is its letters in order, gaps allowed,
   and the rows go best match first unless ordered by a column; quoted words stay as typed.
 - Marking with the keyboard (`Tab`, `⇧↑` `⇧↓`, `⌘A`) and the mouse (the boxes, a drag down them,

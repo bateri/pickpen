@@ -5,6 +5,8 @@
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Recipe {
+    /// `--reload`: the command the rows are read from.
+    pub reload: Option<String>,
     /// `--input` as the person gave it; the shape read from the input needs no flag.
     pub input: Option<String>,
     /// `--delimiter` and `--read0`, as given.
@@ -35,6 +37,10 @@ pub fn shell_quote(word: &str) -> String {
 pub fn command_line(recipe: &Recipe) -> String {
     let given = |v: &Option<String>| v.as_deref().filter(|s| !s.is_empty()).map(str::to_string);
     let mut words = vec!["pickpen".to_string()];
+    if let Some(reload) = given(&recipe.reload) {
+        words.push("--reload".to_string());
+        words.push(shell_quote(&reload));
+    }
     if let Some(input) = given(&recipe.input) {
         words.push("--input".to_string());
         words.push(input);
@@ -109,16 +115,17 @@ mod tests {
         );
         assert_eq!(
             command_line(&Recipe {
+                reload: Some("rg -n x".to_string()),
                 delimiter: Some(":".to_string()),
                 read0: true,
                 where_: "2>10".to_string(),
                 fuzzy: true,
                 field: Some(vec!["1".to_string()]),
                 print0: true,
-                expect: vec!["ctrl-o".to_string(), "f5".to_string()],
+                expect: vec!["ctrl-g".to_string(), "f5".to_string()],
                 ..Recipe::default()
             }),
-            "pickpen --delimiter : --read0 --where '2>10' --fuzzy --field 1 --print0 --expect ctrl-o,f5"
+            "pickpen --reload 'rg -n x' --delimiter : --read0 --where '2>10' --fuzzy --field 1 --print0 --expect ctrl-g,f5"
         );
     }
 }
