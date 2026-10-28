@@ -10,7 +10,18 @@ local runner = require("pencere")
 
 local M = {}
 
-local PARTS = { "00-core", "10-element", "20-memory", "30-json", "40-page" }
+-- The parts of the prelude: every Lua file of its directory, in the order of their names, as pencere
+-- builds them into the interpreter (kit/luau/build.sh), so that a part the kit gains is loaded too.
+local function parts(prelude_dir)
+	local list = {}
+	for _, entry in ipairs(runner.fs.list(prelude_dir)) do
+		local name = string.match(entry.name, "^(.*)%.lua$")
+		if name and entry.kind == "file" then
+			list[#list + 1] = name
+		end
+	end
+	return list
+end
 
 -- The globals a page may use: the ones the kit's interpreter gives it. Anything else is a name the
 -- page misspelt or a local it forgot, which Luau would not catch until the line ran.
@@ -147,7 +158,7 @@ function M.start(prelude_dir, page_path)
 		end,
 	}
 	pencere = globals
-	for _, name in ipairs(PARTS) do
+	for _, name in ipairs(parts(prelude_dir)) do
 		local source = runner.fs.read(prelude_dir .. "/" .. name .. ".lua")
 		local chunk, err = loadstring(source, "@" .. name)
 		assert(chunk, err)
