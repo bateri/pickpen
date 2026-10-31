@@ -96,7 +96,7 @@ function Program:serve(k)
 				more = true
 				local result = self:answer(call.method, call.params or {})
 				if result ~= nil then
-					k.kit.message(json.encode({ response = { id = call.id, result = result } }))
+					k.entry.message(json.encode({ response = { id = call.id, result = result } }))
 				end
 			end
 		end

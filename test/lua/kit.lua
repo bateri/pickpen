@@ -98,6 +98,187 @@ function M.load_page(page_path)
 	return load("page", {})
 end
 
+-- The JSON reader the kit's interpreter has in its bridge (`json_read` of the host's functions): the
+-- text read into values, `null` as `null` (and not at all in an object, whose `nulls` record the key),
+-- an empty list marked `array`. The result and the wording of its refusals are the bridge's, written
+-- again here in Lua. It gives the value, or nil and why.
+local MAX_DEPTH = 128
+
+local function json_fail(at, why)
+	error({ json = true, message = string.format("%s at %d", why, at) }, 0)
+end
+
+local function json_skip(text, at)
+	return string.find(text, "[^ \t\r\n]", at) or #text + 1
+end
+
+local json_value
+
+local json_plain = { ['"'] = '"', ["\\"] = "\\", ["/"] = "/", b = "\b", f = "\f", n = "\n", r = "\r", t = "\t" }
+
+local function json_string(text, at)
+	local out = {}
+	local from = at + 1
+	while true do
+		local stop = string.find(text, '["\\%c]', from)
+		if not stop then
+			json_fail(at, "a string that does not end")
+		end
+		out[#out + 1] = string.sub(text, from, stop - 1)
+		local character = string.sub(text, stop, stop)
+		if character == '"' then
+			return table.concat(out), stop + 1
+		elseif character ~= "\\" then
+			json_fail(stop, "a control character in a string")
+		end
+		local escaped = string.sub(text, stop + 1, stop + 1)
+		if json_plain[escaped] then
+			out[#out + 1] = json_plain[escaped]
+			from = stop + 2
+		elseif escaped == "u" then
+			local digits = string.match(text, "^%x%x%x%x", stop + 2)
+			if not digits then
+				json_fail(stop, "a bad \\u escape")
+			end
+			local code = tonumber(digits, 16)
+			from = stop + 6
+			if code >= 0xD800 and code < 0xDC00 then
+				local low = string.match(text, "^\\u(%x%x%x%x)", from)
+				local lower = low and tonumber(low, 16)
+				if lower and lower >= 0xDC00 and lower < 0xE000 then
+					code = 0x10000 + (code - 0xD800) * 0x400 + (lower - 0xDC00)
+					from += 6
+				else
+					code = 0xFFFD
+				end
+			elseif code >= 0xDC00 and code < 0xE000 then
+				code = 0xFFFD
+			end
+			out[#out + 1] = utf8.char(code)
+		else
+			json_fail(stop, "a bad escape")
+		end
+	end
+end
+
+function json_value(text, at, depth, null, array, nulls)
+	at = json_skip(text, at)
+	local character = string.sub(text, at, at)
+	if (character == "{" or character == "[") and depth >= MAX_DEPTH then
+		json_fail(at, "nested too deep")
+	end
+	if character == "{" then
+		local object = {}
+		at = json_skip(text, at + 1)
+		if string.sub(text, at, at) == "}" then
+			return object, at + 1
+		end
+		while true do
+			if string.sub(text, at, at) ~= '"' then
+				json_fail(at, "a key was expected")
+			end
+			local key
+			key, at = json_string(text, at)
+			at = json_skip(text, at)
+			if string.sub(text, at, at) ~= ":" then
+				json_fail(at, "a colon was expected")
+			end
+			local value
+			value, at = json_value(text, at + 1, depth + 1, null, array, nulls)
+			if value ~= null then
+				object[key] = value
+			else
+				local seen = nulls[object]
+				if not seen then
+					seen = {}
+					nulls[object] = seen
+				end
+				seen[key] = true
+			end
+			at = json_skip(text, at)
+			local after = string.sub(text, at, at)
+			if after == "}" then
+				return object, at + 1
+			elseif after ~= "," then
+				json_fail(at, "a comma or a brace was expected")
+			end
+			at = json_skip(text, at + 1)
+		end
+	elseif character == "[" then
+		local list = {}
+		at = json_skip(text, at + 1)
+		if string.sub(text, at, at) == "]" then
+			return setmetatable(list, array), at + 1
+		end
+		while true do
+			local value
+			value, at = json_value(text, at, depth + 1, null, array, nulls)
+			list[#list + 1] = value
+			at = json_skip(text, at)
+			local after = string.sub(text, at, at)
+			if after == "]" then
+				return list, at + 1
+			elseif after ~= "," then
+				json_fail(at, "a comma or a bracket was expected")
+			end
+			at += 1
+		end
+	elseif character == '"' then
+		return json_string(text, at)
+	elseif string.sub(text, at, at + 3) == "true" then
+		return true, at + 4
+	elseif string.sub(text, at, at + 4) == "false" then
+		return false, at + 5
+	elseif string.sub(text, at, at + 3) == "null" then
+		return null, at + 4
+	end
+	local number = string.match(text, "^-?%d+%.?%d*[eE]?[+-]?%d*", at)
+	if not number or number == "" then
+		json_fail(at, "a value was expected")
+	end
+	local value = tonumber(number)
+	if not value then
+		json_fail(at, "a bad number")
+	end
+	return value, at + #number
+end
+
+local function json_read(text, null, array, nulls)
+	local ok, value, at = pcall(json_value, tostring(text), 1, 1, null, array, nulls)
+	if not ok then
+		if type(value) == "table" and value.json then
+			return nil, value.message
+		end
+		error(value, 0)
+	end
+	if json_skip(tostring(text), at) <= #tostring(text) then
+		return nil, "more after the value at " .. at
+	end
+	if value == null then
+		return nil
+	end
+	return value
+end
+
+-- The prelude's parts are loaded as `=prelude/<name>`, as the bridge loads them: the place of a
+-- refusal is the first function on the stack that is not one of them, "file:line: ", and nothing
+-- where that function is not Lua's.
+local function where()
+	for level = 2, 200 do
+		local source, line = debug.info(level, "sl")
+		if source == nil then
+			return ""
+		end
+		if source == "[C]" then
+			return ""
+		end
+		if string.sub(source, 1, 8) ~= "prelude/" then
+			return string.format("%s:%d: ", source, line)
+		end
+	end
+	return ""
+end
+
 local Kit = {}
 Kit.__index = Kit
 
@@ -157,22 +338,31 @@ function M.start(prelude_dir, page_path)
 			return nil
 		end,
 	}
-	pencere = globals
+	-- The bridge makes `pencere` empty, gives each part of the prelude the table the parts share
+	-- (`internal`, the host's functions in it) and keeps the entry points the last part leaves in it.
+	globals.json_read = json_read
+	globals.where = where
+	globals.wall_clock = function()
+		return os.time(), 0
+	end
+	local internal = { host = globals }
+	pencere = {}
 	for _, name in ipairs(parts(prelude_dir)) do
 		local source = runner.fs.read(prelude_dir .. "/" .. name .. ".lua")
-		local chunk, err = loadstring(source, "@" .. name)
+		local chunk, err = loadstring(source, "=prelude/" .. name)
 		assert(chunk, err)
-		chunk()
+		chunk(internal)
 	end
+	self.entry = internal.entry
 	self.page = M.load_page(page_path)
-	pencere.start(self.page)
+	self.entry.start(self.page)
 	self.kit = pencere
 	return self
 end
 
 function Kit:render(width, height, now)
 	self.now = now or self.now or 100
-	local root, animating, wake = pencere.render(width or 1200, height or 700, self.now, false)
+	local root, animating, wake = self.entry.render(width or 1200, height or 700, self.now, false)
 	self.root = root
 	return root, animating, wake
 end
@@ -180,12 +370,12 @@ end
 -- The host laid the page out: what depends on the layout is brought within it. Whether the page
 -- wants to be rendered again.
 function Kit:settle()
-	return pencere.settle()
+	return self.entry.settle()
 end
 
 function Kit:event(event)
 	event.mods = event.mods or {}
-	return pencere.handle(event)
+	return self.entry.handle(event)
 end
 
 -- The host has the box `id` at `x` across and `y` down (nil: where it is), within its reach.
@@ -259,13 +449,13 @@ end
 function Kit:answer(method, result)
 	local call = find_call(self, method)
 	assert(call, "the page has not asked " .. method)
-	pencere.message(pencere.json.encode({ response = { id = call.id, result = result } }))
+	self.entry.message(pencere.json.encode({ response = { id = call.id, result = result } }))
 end
 
 function Kit:fail(method, code, message)
 	local call = find_call(self, method)
 	assert(call, "the page has not asked " .. method)
-	pencere.message(pencere.json.encode({ response = { id = call.id, error = { code = code, message = message } } }))
+	self.entry.message(pencere.json.encode({ response = { id = call.id, error = { code = code, message = message } } }))
 end
 
 -- The last call of `method` the page made, with its params.
@@ -288,7 +478,7 @@ function Kit:push(topic, value)
 	for index = #self.sent, 1, -1 do
 		local message = pencere.json.decode(self.sent[index])
 		if message.subscribe and message.subscribe.topic == topic then
-			pencere.message(pencere.json.encode({ push = { id = message.subscribe.id, value = value } }))
+			self.entry.message(pencere.json.encode({ push = { id = message.subscribe.id, value = value } }))
 			return
 		end
 	end
