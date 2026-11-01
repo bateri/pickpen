@@ -204,9 +204,9 @@ function L.keys(spec, quiet, ink)
 end
 
 -- What an event says of the modifiers, and what a spec asks for: whether they are the same key.
--- A letter is matched in either case; `+`, `?` and the like are typed with ⇧, so ⇧ does not count
--- against them.
-local SHIFTED = { ["+"] = true, ["?"] = true, ["`"] = true, ["~"] = true }
+-- A letter is matched in either case. A character that has no case (`?`, `/`, a digit) is typed with
+-- ⇧ on one keyboard and without it on another, so ⇧ does not count against it, as the kit's keys do,
+-- unless the spec names Shift.
 local EVENT_KEYS = {
 	up = "arrowup",
 	down = "arrowdown",
@@ -219,6 +219,12 @@ local EVENT_KEYS = {
 
 function L.key_name(key)
 	return EVENT_KEYS[key] or string.lower(key)
+end
+
+-- Whether `key` is a character that has no case: a digit or a sign (a space is no character to type
+-- with ⇧).
+local function caseless(key)
+	return string.find(key, "^[%p%d]$") ~= nil
 end
 
 function L.matches(key, mods, spec)
@@ -240,7 +246,7 @@ function L.matches(key, mods, spec)
 		return false
 	end
 	want = string.lower(want)
-	if (mods.shift == true) ~= need.shift and not SHIFTED[want] then
+	if (mods.shift == true) ~= need.shift and not (caseless(key) and not need.shift) then
 		return false
 	end
 	return L.key_name(key) == want
