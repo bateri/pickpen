@@ -474,8 +474,29 @@ t.test("a right-click on a row offers what can be done with it", function()
 	t.has(titles, "Mark the row")
 	t.has(titles, "Send this row")
 	t.has(titles, "Copy the row")
-	act(k, { type = "menu", index = 1 })
+	-- The terminal hands back the number the kit gave the menu with the pick, and the page is told the
+	-- line of the menu that was shown.
+	act(k, { type = "menu", serial = reply.menu.serial, index = 1 })
 	t.eq(k:last_call("mark").params.ids, { 0 })
+end)
+
+t.test("a pick of a menu that is not the one shown does nothing", function()
+	local k = opened()
+	k.bounds_of.rows = { x = 0, y = 60, w = 900, h = 600 }
+	k.hit_id = "r:1"
+	local first = act(k, { type = "press", x = 100, y = 60 + 5, button = "right" })
+	k.hit_id = "r:2"
+	act(k, { type = "press", x = 100, y = 60 + 25, button = "right" })
+	local calls = #k:calls_of("mark")
+	-- The terminal showed the first menu and not the second: the pick is of the first, whatever the
+	-- page asked for last.
+	act(k, { type = "menu", serial = first.menu.serial, index = 1 })
+	t.eq(k:last_call("mark").params.ids, { 0 })
+	t.eq(#k:calls_of("mark"), calls + 1)
+	-- A menu is picked from once, and a number the page never gave is not a pick.
+	act(k, { type = "menu", serial = first.menu.serial, index = 1 })
+	act(k, { type = "menu", serial = 99, index = 1 })
+	t.eq(#k:calls_of("mark"), calls + 1)
 end)
 
 t.test("only the rows in sight are made, however many there are", function()

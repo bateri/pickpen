@@ -43,7 +43,6 @@ local S = {
 	column = 1, -- the column the column panel shows
 	overlay = nil, -- "palette" or "help"
 	palette = { text = "", chosen = 1 },
-	menu = nil, -- what the entries of the menu that is up do
 	sending = false,
 	escape_asked = -100,
 	toast = nil, -- { text =, tone =, until_ = }

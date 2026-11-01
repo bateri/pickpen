@@ -144,6 +144,8 @@ end
 -- ---- menus ---------------------------------------------------------------------------------------------------
 
 -- Opens a menu at the pointer: `items` are `{ label =, keys =, run =, disabled = }` or `{ separator = true }`.
+-- A line carries what a pick of it does (`run`): the kit tells the pick with the line of the menu the
+-- person was shown, as `event.entry`, and the terminal shows one menu at a time.
 local function open_menu(at, items)
 	local entries = {}
 	for _, item in ipairs(items) do
@@ -154,10 +156,10 @@ local function open_menu(at, items)
 				title = item.label,
 				key = item.keys and L.label(item.keys) or nil,
 				enabled = not item.disabled,
+				run = item.run,
 			}
 		end
 	end
-	S.menu = items
 	S.out.menu = { at = { x = at.x, y = at.y }, entries = entries }
 end
 
@@ -755,11 +757,9 @@ local function handle(event)
 	elseif kind == "scrolled" then
 		return on_scrolled(event)
 	elseif kind == "menu" then
-		local items = S.menu
-		S.menu = nil
-		local item = items and items[event.index]
-		if item and item.run and not item.disabled then
-			item.run()
+		local entry = event.entry
+		if entry and entry.run and entry.enabled ~= false then
+			entry.run()
 		end
 		A.keep_keyboard()
 		return A.reply()
