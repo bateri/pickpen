@@ -151,7 +151,7 @@ function K.query_bar()
 		counts:child(T("the first " .. L.count(sum.total) .. " rows; the rest was not read", "warning"))
 	elseif not sum.done then
 		counts:child(T(" · ", "dim"))
-		counts:child(b.div():row():items_center():gap(5):child(live_dot()):child(T("reading…", "info")))
+		counts:child(b.div():row():items_center():gap(5):child(live_dot()):child(T("reading", "info")))
 	end
 	line:child(counts)
 	bar:child(line)
@@ -218,7 +218,7 @@ function K.bar(narrow)
 	local hidden = sum.marked > 0 and (sum.hidden_marks or 0) or 0
 	local label
 	if S.sending then
-		label = "Sending…"
+		label = "Sending"
 	elseif sum.marked > 0 then
 		label = "Send "
 			.. L.plural(sum.marked, "row")
@@ -394,7 +394,7 @@ function K.help()
 						:items_center()
 						:gap(4)
 						:child(L.keys("Ctrl-1"))
-						:child(T("…", "dim"))
+						:child(T("to", "dim"))
 						:child(L.keys("Ctrl-9")),
 					"Order by the column at that place; again for the other way"
 				)

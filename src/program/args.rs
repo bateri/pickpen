@@ -24,20 +24,23 @@ you choose in the terminal pane, and the rows you chose go out on stdout.
   -c, --confirm          a person confirms: the rows --where matches are marked,
                          and only marked rows go out
   -s, --sort [-]COLUMN   in COLUMN's order (with -, the other way)
-  -f, --field COLUMN,…   write these columns of each row, tab-separated
+  -f, --field COLUMNS    write these comma-separated columns of each row,
+                         tab-separated
       --format TEMPLATE  write each row as TEMPLATE: {COLUMN}, {2}, {} the row
   -o, --output FORMAT    write csv, tsv, json or jsonl
       --print0           end each row written with NUL, for xargs -0
   -i, --input FORMAT     read lines, csv, tsv, columns, jsonl or json
                          (without it, the shape is read from the first lines)
-  -d, --delimiter SEP    read lines cut into columns 1, 2, … at SEP ('\\t' a tab),
-                         the last taking the rest of the line: -d : for grep -n
+  -d, --delimiter SEP    read lines cut at SEP into columns numbered from 1
+                         ('\\t' a tab), the last taking the rest of the line:
+                         -d : for grep -n
       --read0            rows end at NUL, as find -print0 writes them
   -p, --preview COMMAND  show what COMMAND prints for the row the cursor is on;
                          {} {COLUMN} {2} stand for the row and its cells, {q} for
                          the query, {+} {+COLUMN} for the marked rows (or the row)
-      --expect KEY,…     KEY sends too (ctrl-g, f5), and the first line written is
-                         the key that sent, empty for Enter
+      --expect KEYS      comma-separated keys that send too (ctrl-g, f5), and
+                         the first line written is the key that sent, empty for
+                         Enter
       --reload COMMAND   read the rows from what COMMAND prints, not from stdin,
                          and again on ⌃R and after --execute
       --execute COMMAND  run COMMAND on ⌃X, its braces filled as --preview's,

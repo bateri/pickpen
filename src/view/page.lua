@@ -57,7 +57,7 @@ local function waiting()
 		:family("terminal")
 		:text_size(L.SIZE.ui)
 		:child(L.mark(28))
-		:child(T(S.error or "Waiting for the program…", S.error and "error" or "dim"))
+		:child(T(S.error or "Waiting for the program", S.error and "error" or "dim"))
 end
 
 local function build()

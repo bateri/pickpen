@@ -244,6 +244,7 @@ t.test("the page asks its program what it is, listens to the rows, and shows the
 	k:render(W, H, 100)
 	t.eq(#k:calls_of("boot"), 1)
 	t.has(texts(k), "Waiting for the program")
+	t.lacks(texts(k), "…", "a busy text is not ended by an ellipsis")
 	local program = new_program(PODS)
 	k.program = program
 	program:serve(k)
@@ -445,6 +446,7 @@ t.test("F1 shows the keys, the mouse and the query, and Esc closes it", function
 	t.has(words, "Typing always goes to the query.")
 	t.has(words, "Drag across the chart")
 	t.has(words, "cpu>50  size>=1G  age<2h")
+	t.lacks(words, "…", "the help has no ellipsis, nor as a range of keys")
 	key(k, "escape")
 	t.lacks(texts(k), "Typing always goes to the query.")
 end)

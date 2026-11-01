@@ -340,7 +340,7 @@ local function empty()
 	local sum = S.sum
 	local box = b.div():absolute():inset(60, 0, nil, 0):row():justify_center():px(16)
 	if sum.total == 0 then
-		return box:child(T(sum.done and "The input has no rows." or "Waiting for rows…", "dim"))
+		return box:child(T(sum.done and "The input has no rows." or "Waiting for rows", "dim"))
 	end
 	return box:child(
 		b.div()
