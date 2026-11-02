@@ -15,13 +15,13 @@ path = "src/program/main.rs"
 [dependencies]
 # Pinned to a commit of pencere's main until the release that carries `App` and `pencere dev` for
 # Cargo projects; then "0.4".
-pencere = { git = "https://github.com/bateri/pencere", rev = "51ad77d29b837df3f224fc6adbb60e3230796bf1" }
+pencere = { git = "https://github.com/bateri/pencere", rev = "66fb57135a72a999a706212224d97480e3808762" }
 serde_json = { version = "1", features = ["preserve_order"] }
 libc = "0.2"
 
 # The build script carries src/view/ and src/assets/ into the binary (`pencere::build::app`).
 [build-dependencies]
-pencere = { git = "https://github.com/bateri/pencere", rev = "51ad77d29b837df3f224fc6adbb60e3230796bf1" }
+pencere = { git = "https://github.com/bateri/pencere", rev = "66fb57135a72a999a706212224d97480e3808762" }
 
 [profile.release]
 lto = true
