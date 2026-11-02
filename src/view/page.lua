@@ -154,7 +154,7 @@ local function open_menu(at, items)
 		else
 			entries[#entries + 1] = {
 				title = item.label,
-				key = item.keys and L.label(item.keys) or nil,
+				keys = item.keys and L.spec(item.keys) or nil,
 				enabled = not item.disabled,
 				run = item.run,
 			}

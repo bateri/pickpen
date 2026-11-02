@@ -174,6 +174,28 @@ function L.glyphs(spec)
 	return out
 end
 
+-- A key as the kit writes it, `mod+c` or `page_up`, which is what a menu's line is given to show
+-- (`keys =`): the host draws it, with the glyphs of the machine.
+local SPEC_NAMES = {
+	arrowup = "up",
+	arrowdown = "down",
+	arrowleft = "left",
+	arrowright = "right",
+	pageup = "page_up",
+	pagedown = "page_down",
+}
+
+function L.spec(spec)
+	local parts, key = split(spec)
+	local out = {}
+	for _, part in ipairs(parts) do
+		out[#out + 1] = string.lower(part)
+	end
+	key = string.lower(key)
+	out[#out + 1] = SPEC_NAMES[key] or key
+	return table.concat(out, "+")
+end
+
 -- A key as one string: `⌘K`.
 function L.label(spec)
 	return table.concat(L.glyphs(spec), "")

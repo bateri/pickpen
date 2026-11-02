@@ -480,6 +480,10 @@ t.test("a right-click on a row offers what can be done with it", function()
 	for _, entry in ipairs(reply.menu.entries) do
 		if type(entry) == "table" then
 			titles[#titles + 1] = entry.title
+			-- The keys of a line are written as the kit reads them, and shown by the host.
+			if entry.title == "Copy the row" then
+				t.eq(entry.keys, "mod+c")
+			end
 		end
 	end
 	t.has(titles, "Mark the row")
