@@ -151,8 +151,8 @@ The installer takes the newest release (or `PICKPEN_VERSION=0.1.0`), checks it a
 release's `SHA256SUMS`, and puts it in `~/.local/bin` (`PICKPEN_INSTALL=<dir>` puts it elsewhere).
 A file a browser downloads is quarantined by macOS; one curl downloads is not.
 
-To choose in a view you need a terminal that hosts pencere views. bateri is the first, and no
-release of it has them yet: until one does, build bateri from its `main` branch. `--where`
+To choose in a view you need a terminal that hosts pencere views. bateri is the first, from
+its 0.23. `--where`
 without `--confirm` needs no terminal at all.
 
 ```sh
