@@ -18,8 +18,8 @@ as the change.
 ## pencere
 
 pickpen is built against the `pencere` crate, and `Cargo.lock` is the one place pencere is pinned.
-While pickpen needs what pencere's `main` has and no release of it does, `Cargo.toml` takes it from
-git at a commit (`rev = "<commit>"`). The gate takes the rest of pencere it is tested with (its
+`Cargo.toml` takes it from pencere's release on
+crates.io. The gate takes the rest of pencere it is tested with (its
 `pencere` command, its stand-in terminal and the prelude of its kit) from the same pencere:
 `make pencere` fetches the commit, or the tag `crates-v<version>` of a release on crates.io, that
 `Cargo.lock` names (`node tools/release.mjs pencere-ref`) into `.cache/pencere` and builds them

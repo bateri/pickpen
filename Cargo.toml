@@ -13,15 +13,14 @@ name = "pickpen"
 path = "src/program/main.rs"
 
 [dependencies]
-# Pinned to a commit of pencere's main until the release that carries `App` and `pencere dev` for
-# Cargo projects; then "0.4".
-pencere = { git = "https://github.com/bateri/pencere", rev = "dd00f11ca10a66450da682cdd27bb34cb7738d89" }
+# The program's side of pencere, from its release on crates.io.
+pencere = "0.4"
 serde_json = { version = "1", features = ["preserve_order"] }
 libc = "0.2"
 
 # The build script carries src/view/ and src/assets/ into the binary (`pencere::build::app`).
 [build-dependencies]
-pencere = { git = "https://github.com/bateri/pencere", rev = "dd00f11ca10a66450da682cdd27bb34cb7738d89" }
+pencere = "0.4"
 
 [profile.release]
 lto = true
