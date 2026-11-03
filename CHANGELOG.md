@@ -7,6 +7,8 @@ change what the previous one did.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-03
+
 ### Added
 
 - Rows from stdin or a file, as lines, CSV, TSV, JSON lines, a JSON document, or a table lined up

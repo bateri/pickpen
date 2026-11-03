@@ -1,6 +1,6 @@
 [package]
 name = "pickpen"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 description = "Choose rows in the middle of a pipeline, in a real interface in the terminal pane"
