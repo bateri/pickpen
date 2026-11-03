@@ -6,10 +6,29 @@ you chose go out on stdout, to whatever comes next. In the colours and font of y
 on your machine or on a server over plain `ssh`.
 
 ```sh
-kubectl get pods | pickpen --where 'STATUS!=Running' --confirm --field NAME | xargs kubectl delete pod
+kubectl get pods | pickpen --where 'STATUS!=Running' --confirm --field NAME \
+  | xargs kubectl delete pod
 ```
 
-![pickpen: the pods that are not running, marked by --where, one unmarked by hand, and what will go out](docs/confirm.png)
+<img src="docs/confirm.png" width="720" alt="pickpen: the pods that are not running, marked by --where, one unmarked by hand, and what will go out">
+
+## Install
+
+pickpen is one file, with nothing to install beside it, for macOS on Apple silicon and Linux on
+arm64 and x86_64:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/bateri/pickpen/main/install.sh | sh
+```
+
+To choose in a view you need a terminal that hosts pencere views: [bateri](https://github.com/bateri/bateri), from its 0.23.
+`--where` without `--confirm` needs no terminal at all.
+
+The installer takes the newest release (or `PICKPEN_VERSION=0.1.0`), checks it against the
+release's `SHA256SUMS`, and puts it in `~/.local/bin` (`PICKPEN_INSTALL=<dir>` puts it elsewhere).
+A file a browser downloads is quarantined by macOS; one curl downloads is not.
+
+## Use
 
 pickpen is a [pencere](https://github.com/bateri/pencere) program. In a terminal that hosts
 pencere views ([bateri](https://github.com/bateri/bateri)) the pane becomes the interface for as
@@ -17,7 +36,51 @@ long as you choose, the way `vim` takes the screen and gives it back. The pipeli
 touches the terminal: pickpen talks to the terminal on the terminal itself, and keeps stdin and
 stdout for the rows.
 
+```sh
+ps aux | pickpen --field PID | xargs kill
+git log --oneline | pickpen --preview 'git show --color {1}' --field 1 | xargs git cherry-pick
+pickpen --where 'level=error' --output json < app.jsonl > errors.json
+```
+
+| status | means                                                                    |
+| ------ | ------------------------------------------------------------------------ |
+| 0      | rows went out                                                            |
+| 1      | none did: nothing was chosen, Send nothing, or `--where` matched nothing |
+| 2      | a person was needed and there was no terminal that shows pencere views   |
+| 64, 65 | the command line was wrong; the input could not be read as its shape     |
+| 66     | the file named could not be read                                         |
+| 130    | ⌃C                                                                       |
+
+**Nothing chosen, nothing sent.** Every command of a pipeline starts at once, and the one after
+pickpen sees its input end whether rows came or not: `xargs -r` runs nothing on no input, but
+`mail` sends an empty mail. A step that must not run without a choice waits for it:
+
+```sh
+pods=$(kubectl get pods | pickpen --confirm --where 'STATUS!=Running' --field NAME) \
+  && printf '%s\n' "$pods" | xargs kubectl delete pod
+```
+
+**Over ssh.** Install it on the server and run it there, in a pane of a terminal that hosts
+pencere: nothing listens on a port, the interface travels in the terminal's own stream, and it
+runs on your machine in a sandbox that reaches nothing but its program. The rows stay on the
+server: the view asks for the ones in sight, a window at a time, and the program filters, sorts
+and marks them where they are, so a million rows are as quick to scroll as a hundred.
+
+pickpen is never an MCP server on stdio: its stdin and stdout are the pipeline's, and it does not
+guess whether it is in one (pencere §13).
+
 ## What it does
+
+<table>
+  <tr>
+    <td width="50%" valign="top"><img src="docs/chart.png" width="100%" alt="A column's chart, dragged across to keep a range"><br>A column's chart, dragged across to keep a range</td>
+    <td width="50%" valign="top"><img src="docs/preview.png" width="100%" alt="The preview of a file"><br>The preview of a file</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><img src="docs/palette.png" width="100%" alt="The palette"><br>The palette</td>
+    <td width="50%" valign="top"><img src="docs/light-80x24.png" width="100%" alt="An 80×24 pane in a light theme"><br>An 80×24 pane in a light theme</td>
+  </tr>
+</table>
 
 **It reads what commands print.** Lines, CSV and TSV, JSON lines, a JSON document (an array, or
 the one array of objects an answer holds, as `kubectl get -o json` and most APIs give), and the
@@ -101,11 +164,6 @@ the preview's; the view stays, says how it ended, and reads the rows again when 
 the preview does, with no terminal: a command that needs one, an editor, comes after pickpen, by
 what goes out or by `--expect`.
 
-|                                                                     |                                                         |
-| ------------------------------------------------------------------- | ------------------------------------------------------- |
-| ![A column's chart, dragged across to keep a range](docs/chart.png) | ![The preview of a file](docs/preview.png)              |
-| ![The palette](docs/palette.png)                                    | ![An 80×24 pane in a light theme](docs/light-80x24.png) |
-
 ## The keyboard, and the mouse
 
 Typing always goes to the query; the commands are on keys that do not type. Everything the keys
@@ -137,56 +195,6 @@ The keys a terminal keeps for itself never reach a view — in bateri `⌘P`, `�
 `@`, `#`, `[` or `{` on many layouts. On Linux and Windows, `⌘` is `Ctrl`. On a Mac, `⌃` with A,
 B, D, E, F, H, K, L, O, T, V or Y edits the query, as it does any Mac text, and `⌃N` `⌃P` move:
 `--expect` takes none of them.
-
-## Run it
-
-pickpen is one file, with nothing to install beside it, for macOS on Apple silicon and Linux on
-arm64 and x86_64:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/bateri/pickpen/main/install.sh | sh
-```
-
-The installer takes the newest release (or `PICKPEN_VERSION=0.1.0`), checks it against the
-release's `SHA256SUMS`, and puts it in `~/.local/bin` (`PICKPEN_INSTALL=<dir>` puts it elsewhere).
-A file a browser downloads is quarantined by macOS; one curl downloads is not.
-
-To choose in a view you need a terminal that hosts pencere views. bateri is the first, from
-its 0.23. `--where`
-without `--confirm` needs no terminal at all.
-
-```sh
-ps aux | pickpen --field PID | xargs kill
-git log --oneline | pickpen --preview 'git show --color {1}' --field 1 | xargs git cherry-pick
-pickpen --where 'level=error' --output json < app.jsonl > errors.json
-```
-
-| status | means                                                                    |
-| ------ | ------------------------------------------------------------------------ |
-| 0      | rows went out                                                            |
-| 1      | none did: nothing was chosen, Send nothing, or `--where` matched nothing |
-| 2      | a person was needed and there was no terminal that shows pencere views   |
-| 64, 65 | the command line was wrong; the input could not be read as its shape     |
-| 66     | the file named could not be read                                         |
-| 130    | ⌃C                                                                       |
-
-**Nothing chosen, nothing sent.** Every command of a pipeline starts at once, and the one after
-pickpen sees its input end whether rows came or not: `xargs -r` runs nothing on no input, but
-`mail` sends an empty mail. A step that must not run without a choice waits for it:
-
-```sh
-pods=$(kubectl get pods | pickpen --confirm --where 'STATUS!=Running' --field NAME) \
-  && printf '%s\n' "$pods" | xargs kubectl delete pod
-```
-
-**Over ssh.** Install it on the server and run it there, in a pane of a terminal that hosts
-pencere: nothing listens on a port, the interface travels in the terminal's own stream, and it
-runs on your machine in a sandbox that reaches nothing but its program. The rows stay on the
-server: the view asks for the ones in sight, a window at a time, and the program filters, sorts
-and marks them where they are, so a million rows are as quick to scroll as a hundred.
-
-pickpen is never an MCP server on stdio: its stdin and stdout are the pipeline's, and it does not
-guess whether it is in one (pencere §13).
 
 ## How it works
 
