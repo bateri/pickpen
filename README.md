@@ -226,7 +226,7 @@ make check          # formatting and clippy, the build, the program's tests, the
                     # installer
 ```
 
-`make check` needs Rust 1.88 or later, StyLua (`cargo install stylua --locked --features luau`)
+`make check` needs Rust 1.99 or later, StyLua (`cargo install stylua --locked --features luau`)
 and Node 22. pencere is the one `Cargo.lock` takes: `make dev` and the tests fetch it at that
 commit or release into `.cache/pencere` and build its command and its stand-in terminal there, the
 first time and when it moves. To work against a pencere you are changing, name it:
