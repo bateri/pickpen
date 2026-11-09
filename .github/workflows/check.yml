@@ -51,5 +51,5 @@ jobs:
           {
             echo "### What this run was held to"
             echo
-            echo "pencere at \`$(node tools/release.mjs pencere-ref)\` (\`Cargo.lock\`): the crate the program is built on, and its \`pencere\` command, its \`pencere-fake-host\` and the prelude of its kit (\`kit/luau/prelude\`) that the view's tests run the view against."
+            echo "pencere at \`$(make -s pencere-ref)\` (\`Cargo.lock\`): the crate the program is built on, and its \`pencere\` command, its \`pencere-fake-host\` and the prelude of its kit (\`kit/luau/prelude\`) that the view's tests run the view against."
           } >> "$GITHUB_STEP_SUMMARY"
