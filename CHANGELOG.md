@@ -7,6 +7,8 @@ change what the previous one did.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-09
+
 ### Added
 
 - **Releases carry a signed `app.json`.** A terminal that follows pickpen (bateri, from its list of
