@@ -104,9 +104,8 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "pencere"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60ac28ff1f022a381a42053e623bbb8b9191e6da4608cd4137fde048022252df"
+version = "0.4.1"
+source = "git+https://github.com/bateri/pencere?rev=02b59c336724a6010b042518d49400a077381708#02b59c336724a6010b042518d49400a077381708"
 dependencies = [
  "libc",
  "pencere-wire",
@@ -116,9 +115,8 @@ dependencies = [
 
 [[package]]
 name = "pencere-wire"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15900225d536c2d2f10389b2bdbde7ccb842707a9ec8f9ffe9677db8e1c2c213"
+version = "0.4.1"
+source = "git+https://github.com/bateri/pencere?rev=02b59c336724a6010b042518d49400a077381708#02b59c336724a6010b042518d49400a077381708"
 dependencies = [
  "serde",
  "serde_json",
