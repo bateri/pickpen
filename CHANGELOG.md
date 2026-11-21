@@ -7,6 +7,13 @@ change what the previous one did.
 
 ## [Unreleased]
 
+### Fixed
+
+- A screen reader, and an agent that reads the pane, are told what the view showed only by colour or
+  by a drawn mark: the row the cursor is on, whether a row is marked and whether every row shown is,
+  which way the ordered column goes, which tab of the side panel is open, which value of a column is
+  kept, and the command the palette is on. The panel's edge and its chart, which had no name, have one.
+
 ## [0.2.0] - 2026-11-09
 
 ### Added

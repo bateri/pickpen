@@ -156,7 +156,11 @@ function Program:answer(method, params)
 			column = params.column,
 			kind = self.kinds[params.column + 1],
 			values = {
-				{ value = "Running", count = 3, chosen = false },
+				{
+					value = "Running",
+					count = 3,
+					chosen = self.chosen_values ~= nil and self.chosen_values.Running == true,
+				},
 				{ value = "Error", count = 1, chosen = false },
 			},
 			distinct = 2,
@@ -641,4 +645,110 @@ t.test("going up, the rows above are made as the rows below are going down", fun
 	t.eq(k:wheel("rows", 0, -22 * 3), true, "near the top of what was made")
 	k:render(W, H, 101.2)
 	t.ok(kit.find(k.root, "r:185") ~= nil, "and the build makes the rows above")
+end)
+
+-- ---- what a screen reader is told -------------------------------------------------------------------------
+-- The kit's meta for an element is what the host's `accessible` reads: its role, its words, where it stands.
+-- The page says by colour, a line under a word or a drawn tick only what these say again.
+
+local function meta_of(k, id)
+	local element = kit.find(k.root, id)
+	t.ok(element, id .. " is on the page")
+	return element.meta
+end
+
+t.test("the panel's edge and its chart are named by what they do, and not by a bare tip", function()
+	local k = opened()
+	t.eq(meta_of(k, "pedge").label, "Resize the panel")
+	key(k, "3", { control = true })
+	key(k, "f3")
+	t.eq(meta_of(k, "chart").label, "Histogram of the values")
+end)
+
+t.test("the panel's tabs say which is in front, and not by ink and a line alone", function()
+	local k = opened()
+	for _, tab in ipairs({ "row", "column", "output" }) do
+		local meta = meta_of(k, "tab:" .. tab)
+		t.eq(meta.role, "tab", tab .. " is a tab")
+		t.eq(meta.selected, tab == "output", tab .. ": the one in front is chosen")
+	end
+	key(k, "f3")
+	t.eq(meta_of(k, "tab:column").selected, true, "the one opened is chosen")
+	t.ok(not meta_of(k, "tab:output").selected, "and the one left is not")
+end)
+
+t.test("the box over the rows is a checkbox that says if every row shown is marked, or some", function()
+	local k = opened()
+	local head = meta_of(k, "hb")
+	t.eq(head.role, "checkbox")
+	t.eq(head.label, "Mark every row shown")
+	t.eq(head.checked, false, "none marked")
+	t.eq(head.value, nil, "and nothing to add")
+	key(k, "tab")
+	head = meta_of(k, "hb")
+	t.eq(head.checked, false, "one marked is not every row")
+	t.eq(head.value, "some marked")
+	key(k, "a", { command = true })
+	head = meta_of(k, "hb")
+	t.eq(head.checked, true, "every row marked")
+	t.eq(head.value, nil)
+end)
+
+t.test("the cursor's row is the one selected, and a marked row's box is a checkbox that is checked", function()
+	local k = opened()
+	t.eq(meta_of(k, "r:1").selected, true, "the cursor is on the first row")
+	t.ok(not meta_of(k, "r:2").selected, "not on the second")
+	t.eq(meta_of(k, "k:1").role, "checkbox")
+	t.eq(meta_of(k, "k:1").label, "Mark the row")
+	t.eq(meta_of(k, "k:1").checked, false)
+	key(k, "tab")
+	t.eq(meta_of(k, "k:1").checked, true, "marked")
+	t.eq(meta_of(k, "k:2").checked, false, "the next is not")
+	t.eq(meta_of(k, "r:2").selected, true, "the cursor stepped on")
+	t.ok(not meta_of(k, "r:1").selected, "and left the first")
+end)
+
+t.test("the column it is ordered by says which way, and not by an arrow alone", function()
+	local k = opened()
+	t.eq(meta_of(k, "h:1").value, nil, "no order yet")
+	key(k, "1", { control = true })
+	t.eq(meta_of(k, "h:1").value, "ascending")
+	t.eq(meta_of(k, "h:2").value, nil, "another column is not ordered")
+	key(k, "1", { control = true })
+	t.eq(meta_of(k, "h:1").value, "descending")
+end)
+
+t.test("the edge that resizes a column is named by the column it resizes", function()
+	local k = opened()
+	t.eq(meta_of(k, "z:1").label, "Resize the NAME column")
+	t.eq(meta_of(k, "z:2").label, "Resize the STATUS column")
+	t.eq(meta_of(k, "z:3").label, "Resize the AGE column")
+end)
+
+t.test("a value that is kept is the one chosen, and not by its tint and tick alone", function()
+	local k = opened()
+	k.program.chosen_values = { Running = true }
+	key(k, "f3")
+	t.eq(meta_of(k, "fval:1").selected, true, "Running is kept")
+	t.ok(not meta_of(k, "fval:2").selected, "Error is not")
+end)
+
+t.test("what is over the rows is closed by a scrim that says so, apart from the dialog it holds", function()
+	local k = opened()
+	key(k, "k", { command = true })
+	t.eq(meta_of(k, "scrim").label, "Close the palette")
+	key(k, "escape")
+	t.ok(kit.find(k.root, "scrim") == nil, "the palette is shut")
+	key(k, "f1")
+	t.eq(meta_of(k, "scrim").label, "Close the keys")
+end)
+
+t.test("the palette's entry the cursor is on is the one selected", function()
+	local k = opened()
+	key(k, "k", { command = true })
+	t.eq(meta_of(k, "pal:1").selected, true)
+	t.ok(not meta_of(k, "pal:2").selected)
+	key(k, "down")
+	t.ok(not meta_of(k, "pal:1").selected)
+	t.eq(meta_of(k, "pal:2").selected, true, "it moved with the cursor")
 end)

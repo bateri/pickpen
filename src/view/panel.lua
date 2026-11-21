@@ -184,6 +184,8 @@ local function chart(facet, width)
 		:w(P.chart_w)
 		:no_shrink()
 		:tip("Drag across to keep only that range; click to let every value in")
+	-- Its bars are drawn, with no words: the host's tip does not name it yet, so it is named here.
+	area:label("Histogram of the values")
 	local count = #c.bins
 	for i, n in ipairs(c.bins) do
 		local middle = (i - 0.5) / count
@@ -242,6 +244,8 @@ local function values(facet, width)
 			:h(20)
 			:no_shrink()
 			:tip("Click: only rows with this · ⌘-click: or with this · right-click: more")
+		-- The value that is kept is tinted and ticked to the eye; to a screen reader it is the one picked.
+		row:selected(value.chosen)
 		local bg = L.hover_bg(id)
 		if bg then
 			row:bg(bg)
@@ -467,23 +471,24 @@ function P.view(narrow)
 		local id = "tab:" .. tab.tab
 		local active = S.panel.tab == tab.tab
 		local level = L.glow(id, L.ui.hover == id and not active)
-		tabs:child(
-			b.div()
-				:press(id)
-				:col()
-				:px(8)
-				:no_shrink()
-				:child(
-					b.div()
-						:grow(1)
-						:row()
-						:items_center()
-						:gap(5)
-						:child(T(tab.label, active and "foreground" or L.mix("dim", "foreground", level)))
-						:child(L.keys(tab.keys, true))
-				)
-				:child(b.div():h(2):bg(active and "accent" or nil))
-		)
+		local el = b.div()
+			:press(id)
+			:col()
+			:px(8)
+			:no_shrink()
+			:child(
+				b.div()
+					:grow(1)
+					:row()
+					:items_center()
+					:gap(5)
+					:child(T(tab.label, active and "foreground" or L.mix("dim", "foreground", level)))
+					:child(L.keys(tab.keys, true))
+			)
+			:child(b.div():h(2):bg(active and "accent" or nil))
+		-- The tab in front is inked and underlined to the eye; to a screen reader it is the one chosen.
+		el:role("tab"):selected(active):label(tab.label)
+		tabs:child(el)
 	end
 	tabs:child(b.spacer())
 	tabs:child(b.div():row():items_center():child(L.icon_button("pclose", "x", 13, 20, "Close the panel")))
@@ -504,16 +509,17 @@ function P.view(narrow)
 	-- pointer, three of them over the rows, and a point wide to the eye. It is laid over the panel's
 	-- edge rather than between the two with negative margins, which the engine counts against the
 	-- room the rows have.
-	return aside:child(
-		b.div()
-			:press("pedge")
-			:absolute()
-			:inset(0, nil, 0, -3)
-			:w(7)
-			:row()
-			:justify_center()
-			:child(b.div():w(1):h_full():bg(L.ui.pressed == "pedge" and alpha("accent", 0.6) or L.line))
-	)
+	local edge = b.div()
+		:press("pedge")
+		:absolute()
+		:inset(0, nil, 0, -3)
+		:w(7)
+		:row()
+		:justify_center()
+		:child(b.div():w(1):h_full():bg(L.ui.pressed == "pedge" and alpha("accent", 0.6) or L.line))
+	-- A line the pointer drags, with no words of its own.
+	edge:label("Resize the panel")
+	return aside:child(edge)
 end
 
 return P

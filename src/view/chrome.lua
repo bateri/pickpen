@@ -253,9 +253,12 @@ end
 
 -- ---- over everything --------------------------------------------------------------------------------------
 
-local function scrim(id)
+-- `words` is what pressing it does, said as a verb: a screen reader reads the dialog over it as its own
+-- controls, and the scrim as the button it is.
+local function scrim(id, words)
 	return b.div()
 		:press(id)
+		:label(words)
 		:absolute()
 		:inset(0, 0, 0, 0)
 		:bg(alpha("background", 0.5))
@@ -303,6 +306,8 @@ function K.palette()
 			:rounded(6)
 			:no_shrink()
 			:opacity(enabled and 1 or 0.45)
+		-- The entry the cursor is on is filled to the eye; to a screen reader it is the one selected.
+		row:selected(i == S.palette.chosen)
 		if i == S.palette.chosen then
 			row:bg(L.cursor)
 		end
@@ -315,7 +320,7 @@ function K.palette()
 	end
 	box:child(list)
 	K.palette_list = shown
-	return scrim("scrim"):child(box)
+	return scrim("scrim", "Close the palette"):child(box)
 end
 
 -- Scrolls the palette's list to the entry the cursor is on.
@@ -452,7 +457,7 @@ function K.help()
 			:scroll()
 			:child(columns)
 	)
-	return scrim("scrim"):child(box)
+	return scrim("scrim", "Close the keys"):child(box)
 end
 
 function K.toast()

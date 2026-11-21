@@ -212,6 +212,8 @@ local function row_of(index, layout)
 	local id = "r:" .. index
 	local el = b.div():press(id):row():h(SIZE.row):w(layout.total):no_shrink():items_center()
 	local is_cursor = index == S.cursor
+	-- The cursor's row is filled and edged to the eye; to a screen reader it is the one selected.
+	el:selected(is_cursor)
 	local marked = row ~= nil and row.marked
 	if is_cursor then
 		el:bg(marked and L.marked_cursor or L.cursor)
@@ -222,18 +224,18 @@ local function row_of(index, layout)
 		el:bg(L.hover)
 	end
 	local box_id = "k:" .. index
-	el:child(
-		b.div()
-			:press(box_id)
-			:row()
-			:items_center()
-			:justify_center()
-			:w(SIZE.mark)
-			:h_full()
-			:no_shrink()
-			:label(marked and "Marked" or "Not marked")
-			:child(tick(marked, false, L.ui.hover == box_id))
-	)
+	local box = b.div()
+		:press(box_id)
+		:row()
+		:items_center()
+		:justify_center()
+		:w(SIZE.mark)
+		:h_full()
+		:no_shrink()
+		:child(tick(marked, false, L.ui.hover == box_id))
+	-- The drawn tick says it to the eye: to a screen reader the box is a checkbox, that is checked.
+	box:role("checkbox"):checked(marked):label("Mark the row")
+	el:child(box)
 	if row == nil then
 		return el
 	end
@@ -253,18 +255,23 @@ local function head_of(layout)
 	local all = shown > 0 and marked_shown >= shown
 	local some = not all and marked_shown > 0
 	local head = b.div():row():h(SIZE.head):w(layout.total):no_shrink():items_center()
-	head:child(
-		b.div()
-			:press("hb")
-			:row()
-			:items_center()
-			:justify_center()
-			:w(SIZE.mark)
-			:h_full()
-			:no_shrink()
-			:tip(all and "Unmark the rows shown" or "Mark every row shown", L.label("Mod-a"))
-			:child(tick(all, some, L.ui.hover == "hb"))
-	)
+	local every = b.div()
+		:press("hb")
+		:row()
+		:items_center()
+		:justify_center()
+		:w(SIZE.mark)
+		:h_full()
+		:no_shrink()
+		:tip(all and "Unmark the rows shown" or "Mark every row shown", L.label("Mod-a"))
+		:child(tick(all, some, L.ui.hover == "hb"))
+	-- The tick, and the dash that says some, are drawn: to a screen reader the box is a checkbox, checked
+	-- when every row shown is marked, and it says "some marked" while some are and not every one.
+	every:role("checkbox"):checked(all):label("Mark every row shown")
+	if some then
+		every:value("some marked")
+	end
+	head:child(every)
 	if layout.skipped > 0 then
 		head:child(b.div():w(layout.skipped):no_shrink())
 	end
@@ -294,22 +301,25 @@ local function head_of(layout)
 		local ink = sorted and "accent" or (over and "foreground" or "dim")
 		cell:child(T(name, ink, SIZE.small, 600):truncate():min_w(0))
 		if sorted then
+			-- The arrow says the way to the eye; the column's words are its name.
+			cell:value(S.order.descending and "descending" or "ascending")
 			cell:child(L.icon(S.order.descending and "arrow-down" or "arrow-up", 12, "accent"))
 		end
 		-- The edge that resizes it: wider to the pointer than it is drawn.
 		local edge = "z:" .. column
 		local lit = L.ui.hover == edge or over or L.ui.pressed == edge
-		cell:child(
-			b.div()
-				:press(edge)
-				:absolute()
-				:inset(0, -3, 0, nil)
-				:w(7)
-				:row()
-				:justify_center()
-				:py(7)
-				:child(b.div():w(1):h_full():bg(lit and "accent" or L.line))
-		)
+		local handle = b.div()
+			:press(edge)
+			:absolute()
+			:inset(0, -3, 0, nil)
+			:w(7)
+			:row()
+			:justify_center()
+			:py(7)
+			:child(b.div():w(1):h_full():bg(lit and "accent" or L.line))
+		-- A line the pointer drags, with no words: it resizes the column it ends.
+		handle:label("Resize the " .. name .. " column")
+		cell:child(handle)
 		head:child(cell)
 	end
 	return head
