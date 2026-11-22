@@ -253,12 +253,13 @@ end
 
 -- ---- over everything --------------------------------------------------------------------------------------
 
--- `words` is what pressing it does, said as a verb: a screen reader reads the dialog over it as its own
--- controls, and the scrim as the button it is.
-local function scrim(id, words)
+-- The dimmed part over everything and the layer the card stands in: a press on it gives the card up, and
+-- no one reads it (the card is the dialog; escape closes it).
+local function scrim(id)
 	return b.div()
 		:press(id)
-		:label(words)
+		:role("none")
+		:layer(true)
 		:absolute()
 		:inset(0, 0, 0, 0)
 		:bg(alpha("background", 0.5))
@@ -281,7 +282,7 @@ function K.palette()
 	local shown = C.palette_shown()
 	S.palette.chosen = math.clamp(S.palette.chosen, 1, math.max(#shown, 1))
 	local width = math.min(560, S.width - 24)
-	local box = pop():w(width):max_w(width)
+	local box = pop():w(width):max_w(width):role("dialog"):label("Command palette")
 	box:child(
 		b.div():px(14):py(9):no_shrink():child(
 			b.div():text_field("palette"):h(20):w_full():child(T("A command, or a column's name", "quiet", SIZE.query))
@@ -320,7 +321,7 @@ function K.palette()
 	end
 	box:child(list)
 	K.palette_list = shown
-	return scrim("scrim", "Close the palette"):child(box)
+	return scrim("scrim"):child(box)
 end
 
 -- Scrolls the palette's list to the entry the cursor is on.
@@ -432,7 +433,7 @@ function K.help()
 		columns:col()
 	end
 	columns:child(keys_col):child(other)
-	local box = pop():w(width)
+	local box = pop():w(width):role("dialog"):label("Keys")
 	box:child(
 		b.div()
 			:row()
@@ -457,7 +458,7 @@ function K.help()
 			:scroll()
 			:child(columns)
 	)
-	return scrim("scrim", "Close the keys"):child(box)
+	return scrim("scrim"):child(box)
 end
 
 function K.toast()

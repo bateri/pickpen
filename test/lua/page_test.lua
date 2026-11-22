@@ -243,6 +243,32 @@ end
 
 -- ---- the tests ----------------------------------------------------------------------------------------------
 
+t.test("a kit that cannot say what it has, or lacks what the page uses, gets a screen that says to update", function()
+	-- The `pencere` of an older kit: what it had, and not what it did not.
+	local function without(lacks)
+		return function(real)
+			return setmetatable({}, {
+				__index = function(_, name)
+					if name == "has" and lacks == "has" then
+						return nil
+					elseif name == "has" then
+						return function(what)
+							return what ~= lacks and real.has(what)
+						end
+					end
+					return real[name]
+				end,
+			})
+		end
+	end
+	for _, lacks in ipairs({ "has", "element.layer" }) do
+		local k = kit.start(PRELUDE, PAGE, without(lacks))
+		k:render(W, H, 100)
+		t.eq(#k:calls_of("boot"), 0, "the page asks nothing of its program")
+		t.has(texts(k), "This version of pickpen needs a newer version of the application: please update it.")
+	end
+end)
+
 t.test("the page asks its program what it is, listens to the rows, and shows them", function()
 	local k = kit.start(PRELUDE, PAGE)
 	k:render(W, H, 100)
@@ -659,7 +685,8 @@ end
 
 t.test("the panel's edge and its chart are named by what they do, and not by a bare tip", function()
 	local k = opened()
-	t.eq(meta_of(k, "pedge").label, "Resize the panel")
+	t.eq(meta_of(k, "pedge").role, "slider")
+	t.eq(meta_of(k, "pedge").label, "Panel width")
 	key(k, "3", { control = true })
 	key(k, "f3")
 	t.eq(meta_of(k, "chart").label, "Histogram of the values")
@@ -686,8 +713,9 @@ t.test("the box over the rows is a checkbox that says if every row shown is mark
 	t.eq(head.value, nil, "and nothing to add")
 	key(k, "tab")
 	head = meta_of(k, "hb")
-	t.eq(head.checked, false, "one marked is not every row")
-	t.eq(head.value, "some marked")
+	t.eq(head.checked, nil, "one marked is not every row: it is neither checked nor not")
+	t.eq(head.mixed, true, "some marked is the middle state of the box")
+	t.eq(head.value, nil, "and no words of its own")
 	key(k, "a", { command = true })
 	head = meta_of(k, "hb")
 	t.eq(head.checked, true, "every row marked")
@@ -720,9 +748,10 @@ end)
 
 t.test("the edge that resizes a column is named by the column it resizes", function()
 	local k = opened()
-	t.eq(meta_of(k, "z:1").label, "Resize the NAME column")
-	t.eq(meta_of(k, "z:2").label, "Resize the STATUS column")
-	t.eq(meta_of(k, "z:3").label, "Resize the AGE column")
+	t.eq(meta_of(k, "z:1").role, "slider")
+	t.eq(meta_of(k, "z:1").label, "NAME column width")
+	t.eq(meta_of(k, "z:2").label, "STATUS column width")
+	t.eq(meta_of(k, "z:3").label, "AGE column width")
 end)
 
 t.test("a value that is kept is the one chosen, and not by its tint and tick alone", function()
@@ -733,14 +762,16 @@ t.test("a value that is kept is the one chosen, and not by its tint and tick alo
 	t.ok(not meta_of(k, "fval:2").selected, "Error is not")
 end)
 
-t.test("what is over the rows is closed by a scrim that says so, apart from the dialog it holds", function()
+t.test("what is over the rows is a layer with a dialog in it, and the scrim around it is not read", function()
 	local k = opened()
 	key(k, "k", { command = true })
-	t.eq(meta_of(k, "scrim").label, "Close the palette")
+	t.eq(meta_of(k, "scrim").role, "none", "the dimmed part is not read")
+	t.eq(meta_of(k, "scrim").label, nil, "and has no words")
+	t.eq(meta_of(k, "scrim").layer, true, "it is the root of a layer")
 	key(k, "escape")
 	t.ok(kit.find(k.root, "scrim") == nil, "the palette is shut")
 	key(k, "f1")
-	t.eq(meta_of(k, "scrim").label, "Close the keys")
+	t.eq(meta_of(k, "scrim").layer, true, "the keys are a layer too")
 end)
 
 t.test("the palette's entry the cursor is on is the one selected", function()

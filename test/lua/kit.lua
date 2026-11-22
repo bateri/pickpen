@@ -283,7 +283,7 @@ local Kit = {}
 Kit.__index = Kit
 
 -- A kit with the page at `page_path` started in it.
-function M.start(prelude_dir, page_path)
+function M.start(prelude_dir, page_path, older)
 	local self =
 		setmetatable({ sent = {}, taken = 0, hit_id = nil, extents = {}, bounds_of = {}, offsets = {}, asks = {} }, Kit)
 	-- What the host gives the interpreter, before the prelude takes it over.
@@ -354,6 +354,10 @@ function M.start(prelude_dir, page_path)
 		chunk(internal)
 	end
 	self.entry = internal.entry
+	-- A test may say the kit is an older one: `older` gives the `pencere` that one had, from this one's.
+	if older then
+		pencere = older(pencere)
+	end
 	self.page = M.load_page(page_path)
 	self.entry.start(self.page)
 	self.kit = pencere

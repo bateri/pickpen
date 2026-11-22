@@ -13,6 +13,11 @@ change what the previous one did.
   by a drawn mark: the row the cursor is on, whether a row is marked and whether every row shown is,
   which way the ordered column goes, which tab of the side panel is open, which value of a column is
   kept, and the command the palette is on. The panel's edge and its chart, which had no name, have one.
+  The command palette and the sheet of keys are read as dialogs, with the rows behind them left out of
+  what is read, and the dimmed part around them is not read (it was an unnamed button). The box over
+  the rows is "mixed" while some rows are marked, and the lines that resize a column and the panel are
+  sliders with a name. A pencere too old for this shows a screen that says to update bateri, instead of
+  a page that does not run.
 
 ## [0.2.0] - 2026-11-09
 

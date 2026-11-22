@@ -266,10 +266,10 @@ local function head_of(layout)
 		:tip(all and "Unmark the rows shown" or "Mark every row shown", L.label("Mod-a"))
 		:child(tick(all, some, L.ui.hover == "hb"))
 	-- The tick, and the dash that says some, are drawn: to a screen reader the box is a checkbox, checked
-	-- when every row shown is marked, and it says "some marked" while some are and not every one.
+	-- when every row shown is marked, and mixed while some are and not every one.
 	every:role("checkbox"):checked(all):label("Mark every row shown")
 	if some then
-		every:value("some marked")
+		every:mixed(true)
 	end
 	head:child(every)
 	if layout.skipped > 0 then
@@ -318,7 +318,7 @@ local function head_of(layout)
 			:py(7)
 			:child(b.div():w(1):h_full():bg(lit and "accent" or L.line))
 		-- A line the pointer drags, with no words: it resizes the column it ends.
-		handle:label("Resize the " .. name .. " column")
+		handle:role("slider"):label(name .. " column width")
 		cell:child(handle)
 		head:child(cell)
 	end

@@ -1,0 +1,44 @@
+focus: field nf6j5m
+rest: motion
+items:
+        text "›"
+        text "5 rows"
+fstxzy  checkbox "Mark every row shown" [unchecked, keys "⌘A"]
+mv31eg  button "NAME" [description "NAME: click to order, right-click for more"]
+c0q016  slider "NAME column width"
+pchdyz  button "STATUS" [description "STATUS: click to order, right-click for more"]
+7vkcy8  slider "STATUS column width"
+2xvcag  button "AGE" [value "ascending", description "AGE: click to order, right-click for more"]
+vfn6ma  slider "AGE column width"
+y7wfw1  button "api-1 Running 53m" [selected]
+bbzh7w  checkbox "Mark the row" [unchecked]
+g394me  button "api-2 Completed 20m"
+dagwr2  checkbox "Mark the row" [unchecked]
+v20s3h  button "web-1 CrashLoopBackOff 23m"
+y8zf8m  checkbox "Mark the row" [unchecked]
+41q6da  button "web-2 Running 40m"
+d2c3ch  checkbox "Mark the row" [unchecked]
+167xwe  button "worker-1 Error 12m"
+7m7mkw  checkbox "Mark the row" [unchecked]
+t1atd0  tab "Row"
+cpg6gt  tab "Column" [selected]
+6hb412  tab "Output"
+e9eszg  button "Close the panel"
+bvegg4  button "AGE durations"
+hffq84  button "Histogram of the values" [description "Drag across to keep only that range; click to let every value in"]
+        text "1m"
+        text "median 20m · log scale"
+        text "3h"
+        text "2 values in 5 rows"
+w19166  button "Running 3" [description "Click: only rows with this · ⌘-click: or with this · right-click: more"]
+fdh0w5  button "Error 1" [description "Click: only rows with this · ⌘-click: or with this · right-click: more"]
+dsde26  slider "Panel width"
+8e99ky  button "⇥ mark"
+q29bzq  button "⏎ send"
+qfrsyw  button "Esc back"
+hcr71c  button "⌘ K commands"
+p5ds7v  button "F1 help"
+x7bya6  button "Send nothing and end"
+2827qq  button "Send this row ⏎"
+fields:
+nf6j5m  field "Type to filter: words, !word, STATUS=Running, AGE<1h — F1 for more" = ""

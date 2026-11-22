@@ -518,7 +518,7 @@ function P.view(narrow)
 		:justify_center()
 		:child(b.div():w(1):h_full():bg(L.ui.pressed == "pedge" and alpha("accent", 0.6) or L.line))
 	-- A line the pointer drags, with no words of its own.
-	edge:label("Resize the panel")
+	edge:role("slider"):label("Panel width")
 	return aside:child(edge)
 end
 

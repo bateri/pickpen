@@ -1,7 +1,7 @@
 # pickpen is one native file: a Rust program with its view (src/view/, a page of pencere's kit, and
 # src/assets/) carried in it. The gate and the steps of a release are here; RELEASING.md says in what
 # order and why.
-.PHONY: check fmt lint pencere-src pencere fake-host pencere-ref build dev test test-program test-page test-binary test-tools dist sums release-prepare release publish demo
+.PHONY: check fmt lint pencere-src pencere pencere-test fake-host pencere-ref build dev test test-program test-page test-reading test-binary test-tools dist sums release-prepare release publish demo
 
 # pencere is what pickpen is built with, and tested with: the `pencere` crate the program is built
 # on, and from the same pencere, its `pencere` command (the Lua runner the view's tests run in, and
@@ -33,7 +33,7 @@ STYLUA ?= stylua
 # fmt formats the Rust and the Lua.
 fmt:
 	cargo fmt
-	$(STYLUA) src/view test/lua
+	$(STYLUA) src/view test/lua test/reading
 
 # lint is the formatting, checked, and clippy.
 lint:
@@ -97,6 +97,16 @@ test-program:
 test-page: pencere
 	PENCERE="$(PENCERE)" PENCERE_PRELUDE="$(PRELUDE)" node --test test/lua.test.mjs
 
+# test-reading sets what an agent reads of the page, in a few states, against the goldens of
+# test/reading/goldens, and holds each reading to the reading audit (a control with no name, an item said
+# twice, a modal's page read behind it): the page is opened in pencere's runner of tests, built in
+# PENCERE_SRC. PENCERE_BLESS=1 writes the goldens.
+PENCERE_TEST ?= $(PENCERE_SRC)/target/release/pencere-test
+pencere-test: pencere-src
+	cd "$(PENCERE_SRC)" && cargo build --release -p pencere-test
+test-reading: pencere-test
+	READING_GOLDENS="$(CURDIR)/test/reading/goldens" "$(PENCERE_TEST)" test/reading/reading_test.lua --root . --jobs 1
+
 # test-binary runs the built program: with nobody to ask (`--where`), and in a pane under the
 # stand-in terminal, with the view's calls. Nothing in it is skipped; a stand-in that is not there
 # stops the run.
@@ -108,7 +118,7 @@ test-binary: fake-host
 test-tools:
 	node --test test/install.test.mjs test/release.test.mjs
 
-test: test-program test-page test-binary test-tools
+test: test-program test-page test-reading test-binary test-tools
 
 # check is the gate: formatting and clippy, the program built, its tests, the built program held to
 # what the view expects of it, and the installer.

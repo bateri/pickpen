@@ -8,6 +8,13 @@
 -- over everything (`chrome.lua`). What the keys and the mouse do is here; what that does is in
 -- `state.lua`, so that the two do the same.
 
+-- Asked of the kit before anything is used that an older one does not have: where it has not, a screen
+-- that says so, and nothing else.
+local needs = require("./needs")
+if not needs.met() then
+	return needs.screen()
+end
+
 local L = require("./lib")
 local state = require("./state")
 local C = require("./commands")

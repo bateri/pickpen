@@ -1,0 +1,24 @@
+focus: field dhar58
+note: behind the modal in front, 40 items of the page, not read
+items:
+        dialog "Command palette"
+bf9t1z    button "Move First row ⌘ ↑" [selected]
+3sc0zk    button "Move Last row, and follow new rows ⌘ ↓"
+jtd246    button "Mark Mark the row and go to the next ⇥"
+h8pj8z    button "Mark Mark every row shown ⌘ A"
+wkbbbh    button "Mark Unmark every row ⇧ ⌘ A"
+1wm4w6    button "Mark Invert the marks of the rows shown"
+52sdbn    button "Mark Unmark the rows shown"
+x4d4rs    button "Send Send ⏎"
+kxjh3w    button "Send Back: close, clear the query, then send nothing Esc"
+c2qrpn    button "Send Send nothing and end"
+rj4n1f    button "Run Read the rows again (--reload) ⌃ R"
+x4wvt7    button "Run Run the command on the row, or the marked rows (--execute) ⌃ X"
+np9q7b    button "Order Rows in the input's order ⌃ 0"
+crassp    button "Panels Commands ⌘ K"
+a7jrn0    button "Panels Keys, the mouse and the query F1"
+k1s7hm    button "Panels Show or hide the side panel ⌘ I"
+fields:
+dhar58  field "A command, or a column's name" = ""
+scrolls:
+dhar58  scroll 0% (at the top)

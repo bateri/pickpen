@@ -1,0 +1,44 @@
+focus: field nf6j5m
+items:
+        text "›"
+        text "5 rows"
+        text " · 2 marked"
+fstxzy  checkbox "Mark every row shown" [mixed, keys "⌘A"]
+mv31eg  button "NAME" [description "NAME: click to order, right-click for more"]
+c0q016  slider "NAME column width"
+pchdyz  button "STATUS" [description "STATUS: click to order, right-click for more"]
+7vkcy8  slider "STATUS column width"
+2xvcag  button "AGE" [description "AGE: click to order, right-click for more"]
+vfn6ma  slider "AGE column width"
+y7wfw1  button "api-1 Running 53m"
+bbzh7w  checkbox "Mark the row" [checked]
+g394me  button "api-2 Completed 20m"
+dagwr2  checkbox "Mark the row" [checked]
+v20s3h  button "web-1 CrashLoopBackOff 23m" [selected]
+y8zf8m  checkbox "Mark the row" [unchecked]
+41q6da  button "web-2 Running 40m"
+d2c3ch  checkbox "Mark the row" [unchecked]
+167xwe  button "worker-1 Error 12m"
+7m7mkw  checkbox "Mark the row" [unchecked]
+t1atd0  tab "Row"
+cpg6gt  tab "Column"
+6hb412  tab "Output" [selected]
+e9eszg  button "Close the panel"
+        text "Again, with nobody to ask"
+        text "pickpen --where ''"
+apcm99  button "Copy the command"
+        text "Sends every row. Mark them (⌘A) to send the same now."
+        text "What goes out"
+        text "· 1 row"
+        text "Each row whole. Right-click a heading to send only that column."
+        text "api-1 Running 53m"
+dsde26  slider "Panel width"
+8e99ky  button "⇥ mark"
+q29bzq  button "⏎ send"
+qfrsyw  button "Esc back"
+hcr71c  button "⌘ K commands"
+p5ds7v  button "F1 help"
+x7bya6  button "Send nothing and end"
+2827qq  button "Send 2 rows ⏎"
+fields:
+nf6j5m  field "Type to filter: words, !word, STATUS=Running, AGE<1h — F1 for more" = ""
